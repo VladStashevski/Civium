@@ -144,6 +144,37 @@
     }
 }
 
+/* Глобальный скейлинг интерфейса под крупные экраны.
+   Весь UI на rem (текст/отступы/размеры/ширина сайдбара), поэтому
+   увеличение корневого font-size масштабирует всё пропорционально. */
+@media (min-width: 1280px) {
+  html {
+    font-size: 17px;
+  }
+}
+@media (min-width: 1536px) {
+  html {
+    font-size: 18px;
+  }
+}
+@media (min-width: 1920px) {
+  html {
+    font-size: 19.5px;
+  }
+}
+@media (min-width: 2560px) {
+  html {
+    font-size: 21px;
+  }
+}
+
+/* Печать слайдов — фиксированный масштаб A4, независимо от экранного скейла */
+@media print {
+  html {
+    font-size: 15px;
+  }
+}
+
 /* Printable slides deck (A4 landscape, one slide per page) */
 @media print {
   @page {
