@@ -35,7 +35,7 @@ export function LoginForm() {
       <div className="flex flex-col gap-2 text-center">
         <h1 className="text-2xl font-semibold">Вход в Civium</h1>
         <p className="text-sm text-muted-foreground">
-          База обращений граждан — войдите, чтобы продолжить
+          Авторизуйтесь для доступа к базе обращений
         </p>
       </div>
 
