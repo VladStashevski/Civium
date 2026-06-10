@@ -44,15 +44,15 @@ export function FacetedFilter<T>({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-64 overflow-hidden p-0" align="start">
-        <div className="max-h-72 overflow-y-auto p-1.5">
+      <PopoverContent className="w-80 overflow-hidden p-0" align="start">
+        <div className="max-h-80 overflow-y-auto p-2">
           {options.map((option) => {
             const isSelected = selected.has(option.value)
             return (
               <button
                 key={option.value}
                 type="button"
-                className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm outline-none hover:bg-accent focus-visible:bg-accent"
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm outline-none hover:bg-accent focus-visible:bg-accent"
                 onClick={() => {
                   const next = new Set(selected)
                   if (isSelected) next.delete(option.value)
@@ -71,9 +71,11 @@ export function FacetedFilter<T>({
                 >
                   {isSelected && <CheckIcon className="size-3" weight="bold" />}
                 </span>
-                <span className="flex-1 truncate">{option.label || '— не задано'}</span>
+                <span className="line-clamp-2 flex-1 leading-snug">
+                  {option.label || '— не задано'}
+                </span>
                 {facets?.get(option.value) !== undefined && (
-                  <span className="text-xs text-muted-foreground tabular-nums">
+                  <span className="shrink-0 self-start pt-0.5 text-xs text-muted-foreground tabular-nums">
                     {facets.get(option.value)}
                   </span>
                 )}
