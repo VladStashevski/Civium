@@ -34,3 +34,6 @@ uploads/
 *.njsproj
 *.sln
 *.sw?
+
+# TanStack Router temp
+.tanstack/
