@@ -3,10 +3,20 @@ import {
   fetchAppeals,
   fetchDashboard,
   fetchReferences,
+  fetchSession,
   patchAppeal,
   uploadExcel,
   type AppealPatch,
 } from '@/lib/api'
+
+export function useSession() {
+  return useQuery({
+    queryKey: ['session'],
+    queryFn: fetchSession,
+    retry: false,
+    staleTime: 60_000,
+  })
+}
 
 export function useDashboard() {
   return useQuery({ queryKey: ['dashboard'], queryFn: fetchDashboard })

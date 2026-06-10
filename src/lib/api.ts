@@ -95,3 +95,26 @@ export type References = {
 export async function fetchReferences(): Promise<References> {
   return asJson(await fetch('/api/references'))
 }
+
+export type Session = { authenticated: boolean; email?: string }
+
+export async function fetchSession(): Promise<Session> {
+  const res = await fetch('/api/auth/session', { credentials: 'same-origin' })
+  if (res.status === 401) return { authenticated: false }
+  return asJson(res)
+}
+
+export async function login(email: string, password: string): Promise<Session> {
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ email, password }),
+  })
+  if (!res.ok) throw new Error('Неверная почта или пароль')
+  return asJson(res)
+}
+
+export async function logout(): Promise<void> {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+}

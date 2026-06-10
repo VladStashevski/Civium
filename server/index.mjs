@@ -98,8 +98,19 @@ app.post('/api/auth/logout', async (_request, reply) => {
   return { authenticated: false }
 })
 
-// NOTE: auth gate disabled for the new local admin (no login screen yet).
-// Re-enable by restoring the onRequest session check + a login page.
+app.addHook('onRequest', async (request, reply) => {
+  if (
+    !request.url.startsWith('/api/') ||
+    request.url === '/api/health' ||
+    request.url.startsWith('/api/auth/')
+  ) {
+    return
+  }
+
+  if (!readSession(request)) {
+    return reply.code(401).send({ error: 'authentication required' })
+  }
+})
 
 app.get('/api/dashboard', async () => {
   const store = await readStore()

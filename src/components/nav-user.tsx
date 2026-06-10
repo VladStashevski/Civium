@@ -1,4 +1,7 @@
 import { useTheme } from 'next-themes'
+import { useNavigate } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
+import { logout } from '@/lib/api'
 import {
   Avatar,
   AvatarFallback,
@@ -45,6 +48,14 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const { theme, setTheme } = useTheme()
+  const navigate = useNavigate()
+  const qc = useQueryClient()
+
+  const handleLogout = async () => {
+    await logout()
+    qc.clear()
+    navigate({ to: '/login' })
+  }
 
   return (
     <SidebarMenu>
@@ -109,7 +120,7 @@ export function NavUser({
               ))}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleLogout}>
               <SignOutIcon />
               Выйти
             </DropdownMenuItem>
