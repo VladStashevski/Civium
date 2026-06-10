@@ -1,0 +1,27 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 4000
+      NODE_ENV: production
+      CIVIUM_ADMIN_EMAIL: ${CIVIUM_ADMIN_EMAIL:?Set CIVIUM_ADMIN_EMAIL in .env}
+      CIVIUM_ADMIN_PASSWORD: ${CIVIUM_ADMIN_PASSWORD:?Set CIVIUM_ADMIN_PASSWORD in .env}
+      CIVIUM_SESSION_SECRET: ${CIVIUM_SESSION_SECRET:?Set CIVIUM_SESSION_SECRET in .env}
+      CIVIUM_COOKIE_SECURE: ${CIVIUM_COOKIE_SECURE:-true}
+    volumes:
+      - ${CIVIUM_DATA_PATH:-./data}:/app/data
+      - ${CIVIUM_UPLOADS_PATH:-./uploads}:/app/uploads
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '80:80'
