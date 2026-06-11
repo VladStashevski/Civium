@@ -1,33 +1,23 @@
 import * as React from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { login } from '@/lib/api'
+import { useLogin } from '@/hooks/use-appeals'
 
 export function LoginForm() {
   const [email, setEmail] = React.useState('')
   const [password, setPassword] = React.useState('')
-  const [error, setError] = React.useState('')
-  const [loading, setLoading] = React.useState(false)
   const navigate = useNavigate()
-  const qc = useQueryClient()
+  const loginMutation = useLogin()
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-    setError('')
-    try {
-      await login(email.trim(), password)
-      await qc.invalidateQueries({ queryKey: ['session'] })
-      navigate({ to: '/' })
-    } catch {
-      setError('Неверная почта или пароль')
-    } finally {
-      setLoading(false)
-    }
+    loginMutation.mutate(
+      { email: email.trim(), password },
+      { onSuccess: () => navigate({ to: '/' }) },
+    )
   }
 
   return (
@@ -64,10 +54,12 @@ export function LoginForm() {
           />
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {loginMutation.isError && (
+          <p className="text-sm text-destructive">Неверная почта или пароль</p>
+        )}
 
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Вход…' : 'Войти'}
+        <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+          {loginMutation.isPending ? 'Вход…' : 'Войти'}
         </Button>
       </div>
     </form>

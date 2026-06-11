@@ -4,6 +4,7 @@ import {
   fetchDashboard,
   fetchReferences,
   fetchSession,
+  login,
   patchAppeal,
   uploadExcel,
   type AppealPatch,
@@ -15,6 +16,15 @@ export function useSession() {
     queryFn: fetchSession,
     retry: false,
     staleTime: 60_000,
+  })
+}
+
+export function useLogin() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ email, password }: { email: string; password: string }) =>
+      login(email, password),
+    onSuccess: (session) => qc.setQueryData(['session'], session),
   })
 }
 
