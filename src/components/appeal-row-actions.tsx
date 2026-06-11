@@ -120,10 +120,16 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
                 <ToggleGroupItem value="none" className="px-4">
                   Не задано
                 </ToggleGroupItem>
-                <ToggleGroupItem value="yes" className="px-4">
+                <ToggleGroupItem
+                  value="yes"
+                  className="px-4 data-[state=on]:border-emerald-500/40 data-[state=on]:bg-emerald-500/10 data-[state=on]:text-emerald-700 dark:data-[state=on]:text-emerald-400"
+                >
                   Обоснованно
                 </ToggleGroupItem>
-                <ToggleGroupItem value="no" className="px-4">
+                <ToggleGroupItem
+                  value="no"
+                  className="px-4 data-[state=on]:border-destructive/40 data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive"
+                >
                   Не обоснованно
                 </ToggleGroupItem>
               </ToggleGroup>

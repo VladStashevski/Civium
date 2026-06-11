@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDashboard } from '@/hooks/use-appeals'
+import { cn } from '@/lib/utils'
 
 type Row = { name: string; count: number }
 
@@ -15,11 +16,15 @@ function DistributionCard({
   description,
   rows,
   total,
+  barClass,
+  pctClass,
 }: {
   title: string
   description?: string
   rows: Row[]
   total: number
+  barClass: string
+  pctClass: string
 }) {
   const max = Math.max(...rows.map((r) => r.count), 1)
   return (
@@ -39,12 +44,13 @@ function DistributionCard({
                     {r.name}
                   </span>
                   <span className="shrink-0 tabular-nums text-muted-foreground">
-                    {r.count} · {pct}%
+                    {r.count} ·{' '}
+                    <span className={cn('font-medium', pctClass)}>{pct}%</span>
                   </span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full rounded-full bg-primary"
+                    className={cn('h-full rounded-full', barClass)}
                     style={{ width: `${(r.count / max) * 100}%` }}
                   />
                 </div>
@@ -88,12 +94,16 @@ export function DashboardBreakdowns() {
         description="Распределение обращений по рубрикам"
         rows={data.byProfile.slice(0, 8)}
         total={data.total}
+        barClass="bg-primary"
+        pctClass="text-primary"
       />
       <DistributionCard
         title="Источники обращений"
         description="Откуда поступают обращения"
         rows={data.bySource}
         total={data.total}
+        barClass="bg-violet-500"
+        pctClass="text-violet-600 dark:text-violet-400"
       />
     </div>
   )

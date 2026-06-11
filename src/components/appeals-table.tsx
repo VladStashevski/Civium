@@ -248,14 +248,19 @@ const columns: ColumnDef<Appeal>[] = [
     filterFn: inArray,
     cell: ({ row }) => {
       const v = row.original.manualFields?.isJustified
-      if (v === true) return <Badge variant="secondary">Обоснованно</Badge>
+      if (v === true)
+        return (
+          <Badge className="border-transparent bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+            Обоснованно
+          </Badge>
+        )
       if (v === false)
         return (
-          <Badge variant="outline" className="border-destructive/30 text-destructive">
+          <Badge className="border-transparent bg-destructive/10 text-destructive">
             Не обоснованно
           </Badge>
         )
-      return <span className="text-muted-foreground">—</span>
+      return <span className="text-muted-foreground/60">—</span>
     },
   },
   {
@@ -264,9 +269,15 @@ const columns: ColumnDef<Appeal>[] = [
     filterFn: inArray,
     cell: ({ row }) =>
       row.original.status === 'withdrawn' ? (
-        <Badge variant="outline">Отозвано</Badge>
+        <Badge variant="outline" className="gap-1.5 font-normal text-muted-foreground">
+          <span className="size-1.5 rounded-full bg-zinc-400" />
+          Отозвано
+        </Badge>
       ) : (
-        <Badge variant="secondary">Активно</Badge>
+        <Badge variant="outline" className="gap-1.5 font-normal">
+          <span className="size-1.5 rounded-full bg-emerald-500" />
+          Активно
+        </Badge>
       ),
   },
   {

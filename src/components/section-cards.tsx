@@ -51,6 +51,7 @@ export function SectionCards() {
       badge: `${summary.profileCount} рубрик`,
       footTitle: 'За весь период наблюдений',
       footDesc: `${formatDateIso(dateRange.from)} — ${formatDateIso(dateRange.to)}`,
+      badgeClass: 'border-primary/30 bg-primary/5 text-primary',
     },
     {
       description: 'На имя главного врача',
@@ -59,6 +60,8 @@ export function SectionCards() {
       badge: `${shareOfTotal(summary.chiefDoctorCount, total)}%`,
       footTitle: 'Поступили напрямую',
       footDesc: `из ${total.toLocaleString('ru-RU')} обращений`,
+      badgeClass:
+        'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400',
     },
     {
       description: 'Перенаправлено',
@@ -67,6 +70,8 @@ export function SectionCards() {
       badge: `${shareOfTotal(summary.redirectedCount, total)}%`,
       footTitle: 'Переданы в инстанции',
       footDesc: 'из вышестоящих органов',
+      badgeClass:
+        'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400',
     },
     {
       description: 'Источники и охват',
@@ -75,6 +80,8 @@ export function SectionCards() {
       badge: `${summary.locationCount} нас. пунктов`,
       footTitle: 'Каналов поступления',
       footDesc: `${summary.profileCount} рубрик обращений`,
+      badgeClass:
+        'border-violet-500/30 bg-violet-500/5 text-violet-700 dark:text-violet-400',
     },
   ]
 
@@ -88,7 +95,7 @@ export function SectionCards() {
               {card.value}
             </CardTitle>
             <CardAction>
-              <Badge variant="outline">
+              <Badge variant="outline" className={card.badgeClass}>
                 <card.icon />
                 {card.badge}
               </Badge>
