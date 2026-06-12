@@ -42,7 +42,6 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -511,13 +510,11 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
                     Колонки
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuLabel>Показать колонки</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
+                <DropdownMenuContent align="end" className="w-64 p-2.5">
                   <DropdownMenuItem onSelect={() => table.resetColumnSizing()}>
                     Сбросить ширину
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
+                  <DropdownMenuSeparator className="-mx-2.5 my-2.5" />
                   {table
                     .getAllColumns()
                     .filter((c) => c.getCanHide())
@@ -526,6 +523,7 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
                         key={column.id}
                         checked={column.getIsVisible()}
                         onCheckedChange={(v) => column.toggleVisibility(!!v)}
+                        onSelect={(event) => event.preventDefault()}
                       >
                         {COLUMN_LABELS[column.id] ?? column.id}
                       </DropdownMenuCheckboxItem>
