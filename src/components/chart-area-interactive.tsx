@@ -1,7 +1,5 @@
 import * as React from 'react'
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts'
-
-import { useIsMobile } from '@/hooks/use-mobile'
 import {
   Card,
   CardAction,
@@ -12,6 +10,8 @@ import {
 } from '@/components/ui/card'
 import {
   ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
@@ -25,77 +25,144 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { useDashboard } from '@/hooks/use-appeals'
-import { formatMonth } from '@/lib/appeals-data'
+import { normalizeDashboard } from '@/lib/appeals-data'
+import type { AppealMode } from '@/lib/api'
 
 export const description = 'Динамика обращений по месяцам'
 
-const chartConfig = {
-  count: {
-    label: 'Обращения',
-    color: 'var(--primary)',
-  },
-} satisfies ChartConfig
+const MONTHS = [
+  'янв', 'фев', 'мар', 'апр', 'май', 'июн',
+  'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
+]
 
-const RANGES = [
-  { value: 'all', label: 'Весь период' },
-  { value: '12', label: '12 месяцев' },
-  { value: '6', label: '6 месяцев' },
+const PERIODS = [
+  { value: '3', label: 'I квартал', months: 3 },
+  { value: '6', label: 'Полугодие', months: 6 },
+  { value: '9', label: '9 месяцев', months: 9 },
+  { value: '12', label: 'Год', months: 12 },
 ] as const
 
-export function ChartAreaInteractive() {
-  const isMobile = useIsMobile()
-  const [timeRange, setTimeRange] = React.useState<string>('all')
-  const { data, isPending } = useDashboard()
+function MonthAxisTick({
+  x = 0,
+  y = 0,
+  index = 0,
+  lastIndex,
+  payload,
+}: {
+  x?: number
+  y?: number
+  index?: number
+  lastIndex: number
+  payload?: { value?: string | number }
+}) {
+  const textAnchor =
+    index === 0 ? 'start' : index === lastIndex ? 'end' : 'middle'
+  const value = payload?.value
+  const label = MONTHS[Number(value) - 1] ?? String(value ?? '')
+
+  return (
+    <text
+      x={x}
+      y={y}
+      dy={12}
+      textAnchor={textAnchor}
+      fill="var(--muted-foreground)"
+    >
+      {label}
+    </text>
+  )
+}
+
+function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false)
 
   React.useEffect(() => {
-    if (isMobile) setTimeRange('6')
-  }, [isMobile])
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches)
 
-  const byMonth = data?.byMonth ?? []
-  const months = timeRange === 'all' ? byMonth.length : Number(timeRange)
-  const filteredData = byMonth.slice(-months)
+    updatePreference()
+    mediaQuery.addEventListener('change', updatePreference)
+    return () => mediaQuery.removeEventListener('change', updatePreference)
+  }, [])
+
+  return prefersReducedMotion
+}
+
+export function ChartAreaInteractive({ mode }: { mode: AppealMode }) {
+  const isMobile = useIsMobile()
+  const prefersReducedMotion = usePrefersReducedMotion()
+  const [selectedPeriod, setSelectedPeriod] = React.useState('current')
+  const { data, isPending } = useDashboard(mode)
+  const dashboard = normalizeDashboard(data)
+  const availableMonths = dashboard.byMonth.length
+  const visibleMonths =
+    selectedPeriod === 'current'
+      ? availableMonths
+      : Math.min(Number(selectedPeriod), availableMonths)
+  const chartData = dashboard.byMonth.slice(0, visibleMonths)
+  const chartConfig = {
+    previousCount: {
+      label: `${dashboard.comparison.previousYear} · прошлый`,
+      color: 'var(--comparison-previous)',
+    },
+    count: {
+      label: `${dashboard.comparison.currentYear} · текущий`,
+      color: 'var(--primary)',
+    },
+  } satisfies ChartConfig
+  const availablePeriods = PERIODS.filter(
+    (period) => period.months <= availableMonths,
+  )
 
   return (
     <Card className="@container/card">
       <CardHeader>
         <CardTitle>Динамика обращений</CardTitle>
         <CardDescription>
-          <span className="hidden @[540px]/card:block">
-            Количество обращений по месяцам
-          </span>
-          <span className="@[540px]/card:hidden">По месяцам</span>
+          {mode === 'chiefDoctor' ? '07/19' : '07-/01-'} · сопоставимый период:{' '}
+          {dashboard.comparison.previousYear} и{' '}
+          {dashboard.comparison.currentYear}
         </CardDescription>
         <CardAction>
-          <ToggleGroup
-            type="single"
-            value={timeRange}
-            onValueChange={(v) => v && setTimeRange(v)}
-            variant="outline"
-            className="hidden *:data-[slot=toggle-group-item]:px-4! @[767px]/card:flex"
-          >
-            {RANGES.map((r) => (
-              <ToggleGroupItem key={r.value} value={r.value}>
-                {r.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-          <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger
-              className="flex w-40 **:data-[slot=select-value]:block **:data-[slot=select-value]:truncate @[767px]/card:hidden"
-              size="sm"
-              aria-label="Выбрать период"
+          {!isMobile ? (
+            <ToggleGroup
+              type="single"
+              value={selectedPeriod}
+              onValueChange={(value) => value && setSelectedPeriod(value)}
+              variant="outline"
+              spacing={0}
             >
-              <SelectValue placeholder="Весь период" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl">
-              {RANGES.map((r) => (
-                <SelectItem key={r.value} value={r.value} className="rounded-lg">
-                  {r.label}
-                </SelectItem>
+              {PERIODS.map((period) => (
+                <ToggleGroupItem
+                  key={period.value}
+                  value={period.value}
+                  size="sm"
+                  disabled={period.months > availableMonths}
+                >
+                  {period.label}
+                </ToggleGroupItem>
               ))}
-            </SelectContent>
-          </Select>
+              <ToggleGroupItem value="current" size="sm">
+                Текущий период
+              </ToggleGroupItem>
+            </ToggleGroup>
+          ) : (
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+              <SelectTrigger size="sm" className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availablePeriods.map((period) => (
+                  <SelectItem key={period.value} value={period.value}>
+                    {period.label}
+                  </SelectItem>
+                ))}
+                <SelectItem value="current">Текущий период</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
         </CardAction>
       </CardHeader>
       <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
@@ -106,11 +173,31 @@ export function ChartAreaInteractive() {
             config={chartConfig}
             className="aspect-auto h-[250px] w-full"
           >
-            <AreaChart data={filteredData}>
+            <AreaChart data={chartData}>
               <defs>
-                <linearGradient id="fillCount" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--color-count)" stopOpacity={0.9} />
-                  <stop offset="95%" stopColor="var(--color-count)" stopOpacity={0.1} />
+                <linearGradient id="fillPreviousYear" x1="0" y1="0" x2="0" y2="1">
+                  <stop
+                    offset="5%"
+                    stopColor="var(--color-previousCount)"
+                    stopOpacity={0.28}
+                  />
+                  <stop
+                    offset="95%"
+                    stopColor="var(--color-previousCount)"
+                    stopOpacity={0.02}
+                  />
+                </linearGradient>
+                <linearGradient id="fillCurrentYear" x1="0" y1="0" x2="0" y2="1">
+                  <stop
+                    offset="5%"
+                    stopColor="var(--color-count)"
+                    stopOpacity={0.55}
+                  />
+                  <stop
+                    offset="95%"
+                    stopColor="var(--color-count)"
+                    stopOpacity={0.04}
+                  />
                 </linearGradient>
               </defs>
               <CartesianGrid vertical={false} />
@@ -119,24 +206,45 @@ export function ChartAreaInteractive() {
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
-                minTickGap={32}
-                tickFormatter={formatMonth}
+                interval={0}
+                tick={<MonthAxisTick lastIndex={chartData.length - 1} />}
               />
               <ChartTooltip
                 cursor={false}
                 content={
                   <ChartTooltipContent
-                    labelFormatter={(value) => formatMonth(String(value))}
+                    labelFormatter={(value) =>
+                      MONTHS[Number(value) - 1] ?? String(value)
+                    }
                     indicator="dot"
                   />
                 }
               />
+              <ChartLegend content={<ChartLegendContent />} />
               <Area
+                key={`${mode}-${selectedPeriod}-previous`}
+                dataKey="previousCount"
+                type="natural"
+                fill="url(#fillPreviousYear)"
+                stroke="var(--color-previousCount)"
+                strokeWidth={2}
+                strokeDasharray="6 5"
+                animationBegin={0}
+                animationDuration={700}
+                animationEasing="ease-out"
+                isAnimationActive={!prefersReducedMotion}
+              />
+              <Area
+                key={`${mode}-${selectedPeriod}-current`}
                 dataKey="count"
                 type="natural"
-                fill="url(#fillCount)"
+                fill="url(#fillCurrentYear)"
                 stroke="var(--color-count)"
-                isAnimationActive={false}
+                strokeWidth={3}
+                animationBegin={180}
+                animationDuration={900}
+                animationEasing="ease-out"
+                isAnimationActive={!prefersReducedMotion}
               />
             </AreaChart>
           </ChartContainer>

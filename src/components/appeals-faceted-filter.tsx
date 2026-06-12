@@ -60,8 +60,9 @@ export function FacetedFilter<T>({
       <PopoverContent
         className="w-auto min-w-52 max-w-80 overflow-hidden p-0"
         align="start"
+        sideOffset={6}
       >
-        <div className="max-h-80 overflow-y-auto p-1.5">
+        <div className="max-h-80 overflow-y-auto p-2.5">
           {options.map((option) => {
             const isSelected = selected.has(option.value)
             const count = facets?.get(option.value)
@@ -69,7 +70,7 @@ export function FacetedFilter<T>({
               <button
                 key={option.value}
                 type="button"
-                className="flex w-full items-start gap-2.5 rounded-2xl px-3 py-2 text-left text-sm outline-none transition-colors hover:bg-accent focus-visible:bg-accent"
+                className="flex w-full items-start gap-2.5 rounded-xl px-3 py-2 text-left text-sm outline-none transition-colors hover:bg-accent focus-visible:bg-accent"
                 onClick={() => {
                   const next = new Set(selected)
                   if (isSelected) next.delete(option.value)
@@ -108,10 +109,10 @@ export function FacetedFilter<T>({
           })}
         </div>
         {selected.size > 0 && (
-          <div className="border-t p-1.5">
+          <div className="border-t p-2.5">
             <button
               type="button"
-              className="w-full rounded-2xl px-3 py-2 text-center text-sm font-medium text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent"
+              className="w-full rounded-xl px-3 py-2 text-center text-sm font-medium text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent"
               onClick={() => column?.setFilterValue(undefined)}
             >
               Сбросить

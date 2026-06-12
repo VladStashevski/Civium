@@ -1,16 +1,38 @@
-export type MonthPoint = { month: string; count: number }
-export type ProfileRow = { name: string; count: number; share: number }
-export type SourceRow = { name: string; count: number; share: number }
+export type MonthPoint = {
+  month: string
+  count: number
+  previousCount: number
+  delta: number
+}
+export type ProfileRow = {
+  name: string
+  count: number
+  previousCount: number
+  delta: number
+  deltaPercent: number | null
+  share: number
+}
+export type SourceRow = ProfileRow
+export type ComparisonSummary = {
+  total: number
+  profileCount: number
+  sourceCount: number
+  channelCount: number
+  justifiedCount: number
+  unjustifiedCount: number
+}
 
 export type AppealsSummary = {
   chiefDoctorCount: number
   redirectedCount: number
   justifiedCount: number
   unjustifiedCount: number
+  justificationMissingCount: number
   manualCount: number
   excelCount: number
   profileCount: number
   sourceCount: number
+  channelCount: number
   locationCount: number
   rubricMissingCount: number
 }
@@ -24,12 +46,158 @@ export type AppealsDashboard = {
   byMonth: MonthPoint[]
   byProfile: ProfileRow[]
   bySource: SourceRow[]
+  byChiefDoctorChannel?: SourceRow[]
+  comparison: {
+    currentYear: number
+    previousYear: number
+    cutoffMonthDay: string
+    currentTotal: number
+    previousTotal: number
+    delta: number
+    deltaPercent: number | null
+    currentSummary: ComparisonSummary
+    previousSummary: ComparisonSummary
+  }
+}
+
+const emptySummary: AppealsSummary = {
+  chiefDoctorCount: 0,
+  redirectedCount: 0,
+  justifiedCount: 0,
+  unjustifiedCount: 0,
+  justificationMissingCount: 0,
+  manualCount: 0,
+  excelCount: 0,
+  profileCount: 0,
+  sourceCount: 0,
+  channelCount: 0,
+  locationCount: 0,
+  rubricMissingCount: 0,
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function numberValue(value: unknown): number {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : 0
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function countRows(value: unknown): SourceRow[] {
+  if (!Array.isArray(value)) return []
+  return value.map((item) => {
+    const row = objectValue(item)
+    return {
+      name: stringValue(row.name) || 'Не указано',
+      count: numberValue(row.count),
+      previousCount: numberValue(row.previousCount),
+      delta: numberValue(row.delta),
+      deltaPercent:
+        row.deltaPercent === null ? null : numberValue(row.deltaPercent),
+      share: numberValue(row.share),
+    }
+  })
+}
+
+function monthRows(value: unknown): MonthPoint[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => {
+      const row = objectValue(item)
+      return {
+        month: stringValue(row.month),
+        count: numberValue(row.count),
+        previousCount: numberValue(row.previousCount),
+        delta: numberValue(row.delta),
+      }
+    })
+    .filter((row) => row.month)
+}
+
+export function normalizeDashboard(value: unknown): AppealsDashboard {
+  const data = objectValue(value)
+  const rawSummary = objectValue(data.summary)
+  const total = numberValue(data.total)
+  const byProfile = countRows(data.byProfile)
+  const bySource = countRows(data.bySource)
+  const byChiefDoctorChannel = countRows(data.byChiefDoctorChannel)
+  const summary = Object.fromEntries(
+    Object.keys(emptySummary).map((key) => [
+      key,
+      numberValue(rawSummary[key]),
+    ]),
+  ) as AppealsSummary
+  if (rawSummary.profileCount === undefined) summary.profileCount = byProfile.length
+  if (rawSummary.sourceCount === undefined) summary.sourceCount = bySource.length
+  if (rawSummary.channelCount === undefined) {
+    summary.channelCount = byChiefDoctorChannel.length
+  }
+  if (rawSummary.justificationMissingCount === undefined) {
+    summary.justificationMissingCount = Math.max(
+      0,
+      total - summary.justifiedCount - summary.unjustifiedCount,
+    )
+  }
+  const rawDateRange = objectValue(data.dateRange)
+  const rawComparison = objectValue(data.comparison)
+  const normalizeComparisonSummary = (value: unknown): ComparisonSummary => {
+    const summary = objectValue(value)
+    return {
+      total: numberValue(summary.total),
+      profileCount: numberValue(summary.profileCount),
+      sourceCount: numberValue(summary.sourceCount),
+      channelCount: numberValue(summary.channelCount),
+      justifiedCount: numberValue(summary.justifiedCount),
+      unjustifiedCount: numberValue(summary.unjustifiedCount),
+    }
+  }
+
+  return {
+    generatedAt: stringValue(data.generatedAt),
+    sourceFile: stringValue(data.sourceFile),
+    total,
+    dateRange: {
+      from: stringValue(rawDateRange.from),
+      to: stringValue(rawDateRange.to),
+    },
+    summary,
+    byMonth: monthRows(data.byMonth),
+    byProfile,
+    bySource,
+    byChiefDoctorChannel,
+    comparison: {
+      currentYear: numberValue(rawComparison.currentYear),
+      previousYear: numberValue(rawComparison.previousYear),
+      cutoffMonthDay: stringValue(rawComparison.cutoffMonthDay),
+      currentTotal: numberValue(rawComparison.currentTotal) || total,
+      previousTotal: numberValue(rawComparison.previousTotal),
+      delta: numberValue(rawComparison.delta),
+      deltaPercent:
+        rawComparison.deltaPercent === null
+          ? null
+          : numberValue(rawComparison.deltaPercent),
+      currentSummary: normalizeComparisonSummary(rawComparison.currentSummary),
+      previousSummary: normalizeComparisonSummary(rawComparison.previousSummary),
+    },
+  }
 }
 
 /** Доля от общего числа обращений, в процентах (одна десятая). */
 export function shareOfTotal(count: number, total: number): number {
   if (!total) return 0
   return Math.round((count / total) * 1000) / 10
+}
+
+export function formatDeltaPercent(value: number | null): string {
+  if (value === null) return 'новое'
+  return `${value > 0 ? '+' : ''}${value.toFixed(1).replace('.', ',')}%`
 }
 
 const MONTHS_RU = [
@@ -53,6 +221,7 @@ export function formatDateIso(iso: string): string {
 
 /** "2024-01-09" → "09.01.2024" */
 export function formatDateShort(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '—'
   const [y, m, d] = iso.split('-')
   return `${d}.${m}.${y}`
 }

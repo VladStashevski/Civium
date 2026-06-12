@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { DotsThreeVerticalIcon } from '@phosphor-icons/react'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -35,24 +36,28 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
   const [justified, setJustified] = React.useState('none')
   const [notes, setNotes] = React.useState('')
 
-  React.useEffect(() => {
-    if (open) {
-      setJustified(justifiedToValue(appeal.manualFields?.isJustified))
-      setNotes(appeal.manualFields?.notes ?? '')
-    }
-  }, [open, appeal])
+  const openEditor = () => {
+    setJustified(justifiedToValue(appeal.manualFields?.isJustified))
+    setNotes(appeal.manualFields?.notes ?? '')
+    setOpen(true)
+  }
 
   const hasAnnotation =
     appeal.manualFields?.isJustified !== undefined ||
     Boolean(appeal.manualFields?.notes)
 
   const save = () => {
-    mutate({
-      uid: appeal.uid,
-      isJustified: justified === 'yes' ? true : justified === 'no' ? false : null,
-      notes,
-    })
-    setOpen(false)
+    mutate(
+      {
+        uid: appeal.uid,
+        isJustified: justified === 'yes' ? true : justified === 'no' ? false : null,
+        notes,
+      },
+      {
+        onSuccess: () => setOpen(false),
+        onError: () => toast.error('Не удалось сохранить аннотацию'),
+      },
+    )
   }
 
   return (
@@ -69,7 +74,7 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
-          <DropdownMenuItem onSelect={() => setOpen(true)}>
+          <DropdownMenuItem onSelect={openEditor}>
             Редактировать…
           </DropdownMenuItem>
           {hasAnnotation && (
@@ -78,7 +83,10 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 onSelect={() =>
-                  mutate({ uid: appeal.uid, isJustified: null, notes: '' })
+                  mutate(
+                    { uid: appeal.uid, isJustified: null, notes: '' },
+                    { onError: () => toast.error('Не удалось очистить аннотацию') },
+                  )
                 }
               >
                 Очистить аннотацию

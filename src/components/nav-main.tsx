@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Link, type LinkProps } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -7,23 +7,35 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
+import type { AppealMode } from '@/lib/api'
 
 export type NavItem = {
   title: string
-  url: LinkProps['to']
+  url: '/' | '/appeals' | '/references' | '/slides'
   icon?: ReactNode
 }
 
-export function NavMain({ items }: { items: NavItem[] }) {
+export function NavMain({
+  items,
+  mode,
+}: {
+  items: NavItem[]
+  mode: AppealMode
+}) {
   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
         <SidebarMenu>
           {items.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild tooltip={item.title}>
+            <SidebarMenuItem key={item.title} className="w-fit max-w-full">
+              <SidebarMenuButton
+                asChild
+                tooltip={item.title}
+                className="w-fit max-w-full"
+              >
                 <Link
                   to={item.url}
+                  search={{ mode }}
                   activeOptions={{ exact: item.url === '/' }}
                   activeProps={{ 'data-active': 'true' }}
                 >

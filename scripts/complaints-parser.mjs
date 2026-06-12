@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import XLSX from 'xlsx'
 import {
   APPEAL_SOURCE_NAMES,
@@ -44,7 +45,7 @@ export function normalizeExcelRows(rows, options = {}) {
 
 export function normalizeManualRecord(input) {
   const now = new Date().toISOString()
-  const id = clean(input.id) || `manual-${Date.now()}`
+  const id = clean(input.id) || `manual-${crypto.randomUUID()}`
   const registeredAt = normalizeManualDate(input.registeredAt)
   const content = clean(input.content)
   const correspondent = clean(input.correspondent)
@@ -57,7 +58,9 @@ export function normalizeManualRecord(input) {
     clean(input.source) || parseSource({ id, supportDocument }),
     id
   )
-  const isChiefDoctor = isChiefDoctorAppeal(id)
+  const registration = resolveRegistration(id)
+  const isChiefDoctor = registration.appealMode === 'chiefDoctor'
+  const isRedirected = isRedirectedSource(source)
 
   return {
     uid: `manual:${id}`,
@@ -70,8 +73,12 @@ export function normalizeManualRecord(input) {
     profile,
     intent: clean(input.intent) || classifyIntent(content),
     source,
+    sourceOrganization: isChiefDoctor ? APPEAL_SOURCE_NAMES.direct : source,
+    sourceChannel: clean(input.delivery) || 'Не указан',
+    appealMode: registration.appealMode,
+    registrationRoute: registration.registrationRoute,
     isChiefDoctor,
-    isRedirected: !isChiefDoctor,
+    isRedirected,
     recipient,
     rawRubric,
     origin: 'manual',
@@ -85,7 +92,7 @@ export function normalizeManualRecord(input) {
 }
 
 export function buildDashboardData(records, metadata = {}) {
-  const normalizedRecords = records
+  const allRecords = records
     .map((record) => ({
       ...record,
       uid: record.uid ?? `${record.origin ?? 'excel'}:${record.id}`,
@@ -96,48 +103,92 @@ export function buildDashboardData(records, metadata = {}) {
       const dateCompare = clean(a.dateIso).localeCompare(clean(b.dateIso))
       return dateCompare || clean(a.id).localeCompare(clean(b.id))
     })
+  const comparable = selectComparablePeriod(allRecords)
+  const normalizedRecords = comparable.current
+  const previousRecords = comparable.previous
 
   const total = normalizedRecords.length
-  const chiefDoctorCount = normalizedRecords.filter(
-    (record) => record.isChiefDoctor
-  ).length
-  const redirectedCount = normalizedRecords.filter(
-    (record) => record.isRedirected
-  ).length
+  const chiefDoctorRecords = normalizedRecords.filter(
+    (record) => getAppealMode(record) === 'chiefDoctor'
+  )
+  const externalRecords = normalizedRecords.filter(
+    (record) => getAppealMode(record) === 'external'
+  )
+  const chiefDoctorCount = chiefDoctorRecords.length
+  const redirectedCount = externalRecords.length
   const justifiedCount = normalizedRecords.filter((record) =>
     isJustified(record)
   ).length
-  const unjustifiedCount = total - justifiedCount
-  const recordsWithRubric = normalizedRecords.filter((record) => record.rawRubric)
+  const unjustifiedCount = normalizedRecords.filter(
+    (record) => record.manualFields?.isJustified === false
+  ).length
+  const justificationMissingCount = total - justifiedCount - unjustifiedCount
+  const previousSummary = buildSummary(previousRecords)
+  const currentSummary = buildSummary(normalizedRecords)
 
   return {
     generatedAt: new Date().toISOString(),
     sourceFile: metadata.sourceFile ?? 'database',
     total,
     dateRange: getDateRange(normalizedRecords),
+    comparison: {
+      currentYear: comparable.currentYear,
+      previousYear: comparable.previousYear,
+      cutoffMonthDay: comparable.cutoffMonthDay,
+      currentTotal: total,
+      previousTotal: previousRecords.length,
+      delta: total - previousRecords.length,
+      deltaPercent: getPercentChange(total, previousRecords.length),
+      currentSummary,
+      previousSummary,
+    },
     summary: {
       chiefDoctorCount,
       redirectedCount,
       justifiedCount,
       unjustifiedCount,
+      justificationMissingCount,
       manualCount: normalizedRecords.filter((record) => record.origin === 'manual')
         .length,
       excelCount: normalizedRecords.filter((record) => record.origin === 'excel')
         .length,
-      profileCount: countUnique(
-        recordsWithRubric.map((record) => normalizeRubric(record.rawRubric))
+      profileCount: countUnique(normalizedRecords.map((record) => record.profile)),
+      sourceCount: countUnique(
+        externalRecords.map(
+          (record) => record.sourceOrganization || record.documentSource || record.source
+        )
       ),
-      sourceCount: countUnique(normalizedRecords.map((record) => record.source)),
+      channelCount: countUnique(
+        chiefDoctorRecords.map(
+          (record) => record.sourceChannel || record.delivery || 'Не указан'
+        )
+      ),
       locationCount: countUnique(normalizedRecords.map((record) => record.location)),
       rubricMissingCount: normalizedRecords.filter((record) => !record.rawRubric)
         .length,
     },
-    byMonth: groupByMonth(normalizedRecords),
-    byWeek: groupByWeek(normalizedRecords),
-    byProfile: topCounts(recordsWithRubric, (record) =>
-      normalizeRubric(record.rawRubric)
+    byMonth: buildComparableMonths(
+      normalizedRecords,
+      previousRecords,
+      comparable.cutoffMonthDay
     ),
-    bySource: topCounts(normalizedRecords, (record) => record.source),
+    byWeek: groupByWeek(normalizedRecords),
+    byProfile: buildComparableCounts(
+      normalizedRecords,
+      previousRecords,
+      (record) => record.profile
+    ),
+    bySource: buildComparableCounts(
+      externalRecords,
+      previousRecords.filter((record) => getAppealMode(record) === 'external'),
+      (record) =>
+        record.sourceOrganization || record.documentSource || record.source
+    ),
+    byChiefDoctorChannel: buildComparableCounts(
+      chiefDoctorRecords,
+      previousRecords.filter((record) => getAppealMode(record) === 'chiefDoctor'),
+      (record) => record.sourceChannel || record.delivery || 'Не указан'
+    ),
     byLocation: topCounts(normalizedRecords, (record) => record.location),
     byRecipient: topCounts(normalizedRecords, (record) => record.recipient, 8),
     byIntent: topCounts(normalizedRecords, (record) => record.intent),
@@ -152,9 +203,112 @@ export function buildDashboardData(records, metadata = {}) {
         count: unjustifiedCount,
         share: total ? Number(((unjustifiedCount / total) * 100).toFixed(1)) : 0,
       },
+      {
+        name: 'Не определено',
+        count: justificationMissingCount,
+        share: total
+          ? Number(((justificationMissingCount / total) * 100).toFixed(1))
+          : 0,
+      },
     ],
     recent: normalizedRecords.slice(-12).reverse(),
   }
+}
+
+export function selectComparablePeriod(records) {
+  const dated = records.filter((record) => /^\d{4}-\d{2}-\d{2}$/.test(record.dateIso))
+  const currentYear = Math.max(
+    0,
+    ...dated.map((record) => Number(record.dateIso.slice(0, 4)))
+  )
+  const previousYear = currentYear ? currentYear - 1 : 0
+  const currentYearRecords = dated.filter(
+    (record) => Number(record.dateIso.slice(0, 4)) === currentYear
+  )
+  const cutoffMonthDay = currentYearRecords
+    .map((record) => record.dateIso.slice(5))
+    .sort()
+    .at(-1) ?? '12-31'
+  const inWindow = (record, year) =>
+    Number(record.dateIso.slice(0, 4)) === year &&
+    record.dateIso.slice(5) <= cutoffMonthDay
+
+  return {
+    currentYear,
+    previousYear,
+    cutoffMonthDay,
+    current: records.filter((record) => inWindow(record, currentYear)),
+    previous: records.filter((record) => inWindow(record, previousYear)),
+  }
+}
+
+function buildSummary(records) {
+  const chiefDoctorRecords = records.filter(
+    (record) => getAppealMode(record) === 'chiefDoctor'
+  )
+  const externalRecords = records.filter(
+    (record) => getAppealMode(record) === 'external'
+  )
+  return {
+    total: records.length,
+    profileCount: countUnique(records.map((record) => record.profile)),
+    sourceCount: countUnique(
+      externalRecords.map(
+        (record) => record.sourceOrganization || record.documentSource || record.source
+      )
+    ),
+    channelCount: countUnique(
+      chiefDoctorRecords.map(
+        (record) => record.sourceChannel || record.delivery || 'Не указан'
+      )
+    ),
+    justifiedCount: records.filter((record) => isJustified(record)).length,
+    unjustifiedCount: records.filter(
+      (record) => record.manualFields?.isJustified === false
+    ).length,
+  }
+}
+
+function buildComparableCounts(current, previous, getKey) {
+  const currentRows = topCounts(current, getKey)
+  const previousRows = topCounts(previous, getKey)
+  const currentMap = new Map(currentRows.map((row) => [row.name, row.count]))
+  const previousMap = new Map(previousRows.map((row) => [row.name, row.count]))
+  return [...new Set([...currentMap.keys(), ...previousMap.keys()])]
+    .map((name) => {
+      const count = currentMap.get(name) ?? 0
+      const previousCount = previousMap.get(name) ?? 0
+      return {
+        name,
+        count,
+        previousCount,
+        delta: count - previousCount,
+        deltaPercent: getPercentChange(count, previousCount),
+        share: current.length
+          ? Number(((count / current.length) * 100).toFixed(1))
+          : 0,
+      }
+    })
+    .sort((a, b) => b.count - a.count || b.previousCount - a.previousCount)
+}
+
+function buildComparableMonths(current, previous, cutoffMonthDay) {
+  const lastMonth = Number(cutoffMonthDay.slice(0, 2)) || 12
+  return Array.from({ length: lastMonth }, (_, index) => {
+    const month = String(index + 1).padStart(2, '0')
+    const currentCount = current.filter(
+      (record) => record.dateIso.slice(5, 7) === month
+    ).length
+    const previousCount = previous.filter(
+      (record) => record.dateIso.slice(5, 7) === month
+    ).length
+    return {
+      month,
+      count: currentCount,
+      previousCount,
+      delta: currentCount - previousCount,
+    }
+  })
 }
 
 export function buildComparisonReport(
@@ -357,7 +511,10 @@ function canonicalizeSource(value, id = '') {
   const source = clean(value).toLocaleLowerCase('ru-RU')
   const recordId = clean(id)
 
-  if (/^07\/19/i.test(recordId) || /главн\w*\s+врач|ссту|управление\s+президента|администрац\w*\s+президента/.test(source)) {
+  if (/управление\s+президента|администрац[а-яё]*\s+президента/.test(source)) {
+    return APPEAL_SOURCE_NAMES.president
+  }
+  if (/^07\/19/i.test(recordId) || /главн\w*\s+врач|ссту/.test(source)) {
     return APPEAL_SOURCE_NAMES.chiefDoctor
   }
   if (/департамент\s+здравоохранения|депздрав/.test(source)) {
@@ -380,6 +537,44 @@ function canonicalizeSource(value, id = '') {
     return APPEAL_SOURCE_NAMES.publicRights
   }
   return APPEAL_SOURCE_NAMES.direct
+}
+
+function isRedirectedSource(source) {
+  return ![
+    APPEAL_SOURCE_NAMES.chiefDoctor,
+    APPEAL_SOURCE_NAMES.direct,
+    APPEAL_SOURCE_NAMES.unknown,
+  ].includes(canonicalizeSource(source))
+}
+
+function getAppealMode(record) {
+  return record.appealMode || resolveRegistration(record.id).appealMode
+}
+
+function resolveRegistration(id) {
+  const text = clean(id)
+  if (/^07\/19/i.test(text)) {
+    return {
+      appealMode: 'chiefDoctor',
+      registrationRoute: 'На имя главного врача (07/19)',
+    }
+  }
+  if (/^07-(ОГ|ЗИ|НО)/i.test(text)) {
+    return {
+      appealMode: 'external',
+      registrationRoute: 'Депздрав Югры (07-*)',
+    }
+  }
+  if (/^01-/i.test(text)) {
+    return {
+      appealMode: 'external',
+      registrationRoute: 'Губернатор Югры (01-*)',
+    }
+  }
+  return {
+    appealMode: 'external',
+    registrationRoute: 'Другой контур регистрации',
+  }
 }
 
 function normalizeSourceName(value) {
@@ -535,7 +730,7 @@ function groupByMonth(items) {
   const grouped = new Map()
 
   for (const item of items) {
-    const key = item.dateIso.slice(0, 7) || 'Не указано'
+    const key = clean(item.dateIso).slice(0, 7) || 'Не указано'
     const previous = grouped.get(key) ?? { month: key, count: 0 }
     previous.count += 1
     grouped.set(key, previous)

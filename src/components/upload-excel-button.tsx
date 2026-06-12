@@ -24,11 +24,16 @@ export function UploadExcelButton() {
           mutate(file, {
             onSuccess: (r) =>
               toast.success(
-                `Импорт готов: +${r.addedCount} новых, ${r.updatedCount} обновлено, аннотаций сохранено ${r.manualFieldsPreserved}`,
+                `Импорт готов: +${r.addedCount} новых, ${r.updatedCount} обновлено, ${r.removedCount} устаревших удалено, аннотаций сохранено ${r.manualFieldsPreserved}`,
                 { id },
               ),
-            onError: () =>
-              toast.error('Не удалось загрузить файл', { id }),
+            onError: (error) =>
+              toast.error(
+                error instanceof Error
+                  ? error.message
+                  : 'Не удалось загрузить файл',
+                { id },
+              ),
           })
         }}
       />

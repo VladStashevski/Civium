@@ -1,73 +1,89 @@
-# React + TypeScript + Vite
+# Civium
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Веб-приложение для импорта, классификации и анализа обращений граждан из Excel.
 
-Currently, two official plugins are available:
+## Модель обращений
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Обращения анализируются в двух независимых режимах:
 
-## React Compiler
+- `07/19`: обращения на имя главного врача. Основной разрез — канал поступления
+  (`Лично`, `E-mail`, `Почта`, `Курьер`, `СЭВ`).
+- `07-*` и `01-*`: внешние обращения. Основной разрез —
+  источник из сопроводительного документа. Номер определяет только
+  контур регистрации: Депздрав Югры или Губернатор Югры.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Канал доставки и источник хранятся отдельно и не смешиваются в
+одной статистике.
 
-## Expanding the ESLint configuration
+## Локальный запуск
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Требования: Node.js 22 и pnpm 10.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm install
+pnpm api
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+В отдельном терминале:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm dev
 ```
+
+API работает на `http://127.0.0.1:4000`, Vite проксирует запросы `/api`.
+Другой адрес API можно передать через `CIVIUM_API_URL`.
+Локальные учетные данные по умолчанию:
+
+```text
+admin@civium.local
+Civium2026!
+```
+
+Для своих значений задайте `CIVIUM_ADMIN_EMAIL`,
+`CIVIUM_ADMIN_PASSWORD` и `CIVIUM_SESSION_SECRET`.
+
+## Проверки
+
+```bash
+pnpm lint
+pnpm test
+pnpm build
+```
+
+## Развертывание
+
+Production-конфигурация находится в `docker-compose.yml`. Перед запуском нужен
+`.env`:
+
+```dotenv
+CIVIUM_ADMIN_EMAIL=admin@example.com
+CIVIUM_ADMIN_PASSWORD=change-me
+CIVIUM_SESSION_SECRET=at-least-32-random-characters
+CIVIUM_COOKIE_SECURE=true
+```
+
+```bash
+docker compose up -d --build
+```
+
+Приложение должно публиковаться по HTTPS. При запуске без HTTPS необходимо
+явно установить `CIVIUM_COOKIE_SECURE=false`.
+
+## Данные и резервное копирование
+
+- `data/complaints-store.json` содержит текущую базу и ручные аннотации.
+- `uploads/` содержит загруженные исходные Excel-файлы.
+- Каждая новая Excel-выгрузка считается актуальным снимком: строки заново
+  парсятся и классифицируются, совпавшие ручные аннотации сохраняются, а
+  отсутствующие в новой выгрузке Excel-записи удаляются. Записи, созданные
+  вручную в Civium, при импорте не удаляются.
+- Дашборд и справочники автоматически сравнивают последний доступный год с
+  предыдущим за одинаковый период. Например, если данные 2026 года загружены
+  по 9 июня, используются интервалы `01.01–09.06.2025` и
+  `01.01–09.06.2026`. Раздел «Обращения» при этом остаётся полной базой без
+  ограничения по годам.
+- Обе директории исключены из git и подключаются как Docker volumes.
+
+Для полного резервного копирования сохраняйте обе директории. JSON-хранилище
+обновляется последовательно и атомарно, но для нескольких экземпляров API или
+роста нагрузки его следует заменить на SQLite/PostgreSQL.

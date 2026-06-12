@@ -9,18 +9,13 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppeals } from '@/hooks/use-appeals'
-import type { Appeal } from '@/lib/api'
+import type { Appeal, AppealMode } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 const MONTHS_SHORT = [
   'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
   'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек',
 ]
-const MONTHS_FULL = [
-  'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
-  'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
-]
-
 const yearOf = (a: Appeal) => a.dateIso?.slice(0, 4) ?? ''
 const monthOf = (a: Appeal) => a.dateIso?.slice(5, 7) ?? ''
 const isGratitude = (a: Appeal) => /благодарн/i.test(a.profile ?? '')
@@ -114,9 +109,9 @@ function Slide({
   children: React.ReactNode
 }) {
   return (
-    <div className="slide flex w-full flex-col gap-5 overflow-hidden rounded-xl border bg-card p-6 shadow-sm md:p-8">
+    <div className="slide flex w-full flex-col gap-5 overflow-hidden rounded-xl border border-neutral-200 bg-white p-6 text-neutral-950 shadow-sm md:p-8">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b pb-3">
-        <span className="text-sm font-bold tracking-wider text-primary uppercase">
+        <span className="text-sm font-bold tracking-wider text-neutral-950 uppercase">
           Слайд {n}
         </span>
         <h2 className="text-right text-base leading-tight font-bold md:text-lg">{title}</h2>
@@ -373,8 +368,8 @@ function ProfileCard({
 
 // ---------- main ----------
 
-export function SlidesView() {
-  const { data, isPending } = useAppeals()
+export function SlidesView({ mode }: { mode: AppealMode }) {
+  const { data, isPending } = useAppeals(mode)
   const items = React.useMemo(() => data?.items ?? [], [data])
 
   const yearOptions = React.useMemo(() => {
@@ -388,16 +383,13 @@ export function SlidesView() {
     [items],
   )
 
-  const [curYear, setCurYear] = React.useState('')
-  const [prevYear, setPrevYear] = React.useState('')
+  const [selectedCurYear, setCurYear] = React.useState('')
+  const [selectedPrevYear, setPrevYear] = React.useState('')
   const [themes, setThemes] = React.useState<string[]>([]) // пусто = все
   const [comparable, setComparable] = React.useState(true) // только сопоставимый период
-  React.useEffect(() => {
-    if (yearOptions.length && !curYear) {
-      setCurYear(yearOptions[0])
-      setPrevYear(yearOptions[1] ?? String(Number(yearOptions[0]) - 1))
-    }
-  }, [yearOptions, curYear])
+  const curYear = selectedCurYear || yearOptions[0] || ''
+  const prevYear =
+    selectedPrevYear || yearOptions[1] || (curYear ? String(Number(curYear) - 1) : '')
 
   if (isPending) {
     return (
@@ -409,18 +401,20 @@ export function SlidesView() {
 
   const inThemes = (a: Appeal) => themes.length === 0 || themes.includes(a.rubricTheme ?? '')
 
-  // Сопоставимый период: ограничиваем оба года месяцами, которые реально есть
-  // у неполного года (например, янв–май), чтобы не сравнивать с пустыми месяцами.
-  const lastMonthOf = (year: string) =>
-    Math.max(0, ...items.filter((it) => yearOf(it) === year).map((it) => Number(monthOf(it)) || 0))
-  const nzLast = [lastMonthOf(prevYear), lastMonthOf(curYear)].filter((x) => x > 0)
-  const windowEnd = nzLast.length ? Math.min(...nzLast) : 12
-  const monthsLimit = comparable ? windowEnd : 12
-  const inWindow = (a: Appeal) => Number(monthOf(a)) <= monthsLimit
+  const cutoffMonthDay =
+    items
+      .filter((item) => yearOf(item) === curYear)
+      .map((item) => item.dateIso.slice(5))
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? '12-31'
+  const monthsLimit = comparable ? Number(cutoffMonthDay.slice(0, 2)) || 12 : 12
+  const inWindow = (appeal: Appeal) =>
+    !comparable || appeal.dateIso.slice(5) <= cutoffMonthDay
   const periodLabel =
-    monthsLimit >= 12
+    !comparable || cutoffMonthDay === '12-31'
       ? `${prevYear} / ${curYear}`
-      : `${MONTHS_FULL[0]}–${MONTHS_FULL[monthsLimit - 1]} ${prevYear} / ${curYear}`
+      : `01.01–${cutoffMonthDay.slice(3)}.${cutoffMonthDay.slice(0, 2)} · ${prevYear} / ${curYear}`
 
   const prevAll = items.filter((it) => yearOf(it) === prevYear && inWindow(it))
   const curAll = items.filter((it) => yearOf(it) === curYear && inWindow(it))
@@ -444,7 +438,11 @@ export function SlidesView() {
     return { name, prev: c(deepPrev), cur: c(deepCur) }
   }).slice(0, monthsLimit)
 
-  const sources = rankRows(prevAll, curAll, (a) => [a.source || '—'])
+  const sources = rankRows(prevAll, curAll, (appeal) => [
+    mode === 'chiefDoctor'
+      ? appeal.sourceChannel || 'Канал не определён'
+      : appeal.sourceOrganization || 'Источник не определён',
+  ])
   const topics = rankRows(aPrevItems, aCurItems, (a) => [a.rubricTheme || 'Без темы'])
   const profiles = rankRows(deepPrev, deepCur, (a) => [a.profile || '—']).slice(0, 4)
   const profileMax = Math.max(...profiles.flatMap((p) => [p.prev, p.cur]), 1)
@@ -506,7 +504,7 @@ export function SlidesView() {
       <SelectTrigger size="sm" className="w-[92px]">
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="p-2">
         {yearOptions.map((y) => (
           <SelectItem key={y} value={y}>
             {y}
@@ -604,8 +602,15 @@ export function SlidesView() {
         <Slide n={2} title={`Источники и темы: ${periodLabel}`}>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-10">
             <div className="flex flex-col">
-              <span className="mb-2 text-sm font-bold">Источники поступления</span>
-              <RankTable rows={sources} prevYear={prevYear} curYear={curYear} nameHeader="Источник" />
+              <span className="mb-2 text-sm font-bold">
+                {mode === 'chiefDoctor' ? 'Каналы поступления' : 'Источники поступления'}
+              </span>
+              <RankTable
+                rows={sources}
+                prevYear={prevYear}
+                curYear={curYear}
+                nameHeader={mode === 'chiefDoctor' ? 'Канал 07/19' : 'Источник 07-/01-'}
+              />
             </div>
             <div className="flex flex-col">
               <span className="mb-2 text-sm font-bold">Темы обращений</span>

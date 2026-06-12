@@ -16,13 +16,18 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDashboard } from '@/hooks/use-appeals'
-import { formatDateIso, shareOfTotal } from '@/lib/appeals-data'
+import {
+  formatDeltaPercent,
+  normalizeDashboard,
+} from '@/lib/appeals-data'
+import { cn } from '@/lib/utils'
+import type { AppealMode } from '@/lib/api'
 
 const cardWrapClass =
   'grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card'
 
-export function SectionCards() {
-  const { data, isPending } = useDashboard()
+export function SectionCards({ mode }: { mode: AppealMode }) {
+  const { data, isPending } = useDashboard(mode)
 
   if (isPending || !data) {
     return (
@@ -42,46 +47,47 @@ export function SectionCards() {
     )
   }
 
-  const { total, summary, dateRange } = data
+  const dashboard = normalizeDashboard(data)
+  const { total, summary, comparison } = dashboard
+  const isChiefDoctor = mode === 'chiefDoctor'
+  const sourceKindCount = isChiefDoctor ? summary.channelCount : summary.sourceCount
+  const previousSourceKindCount = isChiefDoctor
+    ? comparison.previousSummary.channelCount
+    : comparison.previousSummary.sourceCount
+  const metric = (current: number, previous: number) => ({
+    current,
+    previous,
+    delta: current - previous,
+    deltaPercent:
+      previous === 0 ? (current === 0 ? 0 : null) : ((current - previous) / previous) * 100,
+  })
   const cards = [
     {
       description: 'Всего обращений',
-      value: total.toLocaleString('ru-RU'),
+      ...metric(total, comparison.previousTotal),
       icon: IconInbox,
-      badge: `${summary.profileCount} рубрик`,
-      footTitle: 'За весь период наблюдений',
-      footDesc: `${formatDateIso(dateRange.from)} — ${formatDateIso(dateRange.to)}`,
-      badgeClass: 'border-primary/30 bg-primary/5 text-primary',
+      footTitle: `${comparison.previousYear} → ${comparison.currentYear}`,
     },
     {
-      description: 'На имя главного врача',
-      value: summary.chiefDoctorCount.toLocaleString('ru-RU'),
-      icon: IconStethoscope,
-      badge: `${shareOfTotal(summary.chiefDoctorCount, total)}%`,
-      footTitle: 'Поступили напрямую',
-      footDesc: `из ${total.toLocaleString('ru-RU')} обращений`,
-      badgeClass:
-        'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400',
+      description: 'Рубрики',
+      ...metric(summary.profileCount, comparison.previousSummary.profileCount),
+      icon: isChiefDoctor ? IconStethoscope : IconArrowsExchange,
+      footTitle: 'Уникальных рубрик',
     },
     {
-      description: 'Перенаправлено',
-      value: summary.redirectedCount.toLocaleString('ru-RU'),
-      icon: IconArrowsExchange,
-      badge: `${shareOfTotal(summary.redirectedCount, total)}%`,
-      footTitle: 'Переданы в инстанции',
-      footDesc: 'из вышестоящих органов',
-      badgeClass:
-        'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400',
-    },
-    {
-      description: 'Источники и охват',
-      value: summary.sourceCount.toLocaleString('ru-RU'),
+      description: 'Обоснованные',
+      ...metric(
+        summary.justifiedCount,
+        comparison.previousSummary.justifiedCount,
+      ),
       icon: IconFolders,
-      badge: `${summary.locationCount} нас. пунктов`,
-      footTitle: 'Каналов поступления',
-      footDesc: `${summary.profileCount} рубрик обращений`,
-      badgeClass:
-        'border-violet-500/30 bg-violet-500/5 text-violet-700 dark:text-violet-400',
+      footTitle: `${summary.justificationMissingCount} без оценки`,
+    },
+    {
+      description: isChiefDoctor ? 'Каналы поступления' : 'Источники',
+      ...metric(sourceKindCount, previousSourceKindCount),
+      icon: IconArrowsExchange,
+      footTitle: isChiefDoctor ? 'Каналов 07/19' : 'Источников 07-/01-',
     },
   ]
 
@@ -92,12 +98,20 @@ export function SectionCards() {
           <CardHeader>
             <CardDescription>{card.description}</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {card.value}
+              {card.current.toLocaleString('ru-RU')}
             </CardTitle>
             <CardAction>
-              <Badge variant="outline" className={card.badgeClass}>
+              <Badge
+                variant="outline"
+                className={cn(
+                  card.delta > 0 &&
+                    'border-destructive/30 bg-destructive/5 text-destructive',
+                  card.delta < 0 &&
+                    'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400',
+                )}
+              >
                 <card.icon />
-                {card.badge}
+                {formatDeltaPercent(card.deltaPercent)}
               </Badge>
             </CardAction>
           </CardHeader>
@@ -105,7 +119,11 @@ export function SectionCards() {
             <div className="line-clamp-1 flex gap-2 font-medium">
               {card.footTitle}
             </div>
-            <div className="text-muted-foreground">{card.footDesc}</div>
+            <div className="text-muted-foreground">
+              {comparison.previousYear}: {card.previous.toLocaleString('ru-RU')}
+              {' · '}
+              {comparison.currentYear}: {card.current.toLocaleString('ru-RU')}
+            </div>
           </CardFooter>
         </Card>
       ))}

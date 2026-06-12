@@ -7,6 +7,7 @@ import {
   login,
   patchAppeal,
   uploadExcel,
+  type AppealMode,
   type AppealPatch,
 } from '@/lib/api'
 
@@ -28,16 +29,25 @@ export function useLogin() {
   })
 }
 
-export function useDashboard() {
-  return useQuery({ queryKey: ['dashboard'], queryFn: fetchDashboard })
+export function useDashboard(mode: AppealMode) {
+  return useQuery({
+    queryKey: ['dashboard', mode],
+    queryFn: () => fetchDashboard(mode),
+  })
 }
 
-export function useAppeals() {
-  return useQuery({ queryKey: ['appeals'], queryFn: fetchAppeals })
+export function useAppeals(mode: AppealMode) {
+  return useQuery({
+    queryKey: ['appeals', mode],
+    queryFn: () => fetchAppeals(mode),
+  })
 }
 
-export function useReferences() {
-  return useQuery({ queryKey: ['references'], queryFn: fetchReferences })
+export function useReferences(mode: AppealMode) {
+  return useQuery({
+    queryKey: ['references', mode],
+    queryFn: () => fetchReferences(mode),
+  })
 }
 
 function useInvalidateAppeals() {
@@ -45,6 +55,7 @@ function useInvalidateAppeals() {
   return () => {
     qc.invalidateQueries({ queryKey: ['appeals'] })
     qc.invalidateQueries({ queryKey: ['dashboard'] })
+    qc.invalidateQueries({ queryKey: ['references'] })
   }
 }
 

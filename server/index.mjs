@@ -2,12 +2,12 @@ import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
-import cors from '@fastify/cors'
 import multipart from '@fastify/multipart'
 import Fastify from 'fastify'
 import {
   buildDashboardData,
   normalizeManualRecord,
+  selectComparablePeriod,
 } from '../scripts/complaints-parser.mjs'
 import {
   buildAppealsAnalytics,
@@ -50,6 +50,10 @@ const secureSessionCookie =
     : process.env.CIVIUM_COOKIE_SECURE === 'true'
 const sessionCookie = 'civium_session'
 const sessionLifetimeMs = 12 * 60 * 60 * 1000
+const loginWindowMs = 15 * 60 * 1000
+const loginAttemptLimit = 10
+const loginAttempts = new Map()
+let storeMutationQueue = Promise.resolve()
 
 if (
   !adminEmail ||
@@ -62,11 +66,8 @@ if (
   )
 }
 
-const app = Fastify({ logger: true })
+const app = Fastify({ logger: true, trustProxy: isProduction })
 
-await app.register(cors, {
-  origin: true,
-})
 await app.register(multipart, {
   limits: {
     fileSize: 20 * 1024 * 1024,
@@ -76,13 +77,26 @@ await app.register(multipart, {
 app.get('/api/health', async () => ({ ok: true }))
 
 app.post('/api/auth/login', async (request, reply) => {
+  const clientKey = request.ip
+  const attempt = getLoginAttempt(clientKey)
+  if (attempt.count >= loginAttemptLimit) {
+    const retryAfter = Math.max(
+      1,
+      Math.ceil((attempt.resetAt - Date.now()) / 1000)
+    )
+    reply.header('Retry-After', String(retryAfter))
+    return reply.code(429).send({ error: 'too many login attempts' })
+  }
+
   const email = String(request.body?.email ?? '').trim()
   const password = String(request.body?.password ?? '')
 
   if (!safeEqual(email, adminEmail) || !safeEqual(password, adminPassword)) {
+    recordFailedLogin(clientKey, attempt)
     return reply.code(401).send({ error: 'invalid credentials' })
   }
 
+  loginAttempts.delete(clientKey)
   reply.header('Set-Cookie', buildSessionCookie(createSessionToken(email)))
   return { authenticated: true, email }
 })
@@ -112,9 +126,10 @@ app.addHook('onRequest', async (request, reply) => {
   }
 })
 
-app.get('/api/dashboard', async () => {
+app.get('/api/dashboard', async (request) => {
   const store = await readStore()
-  return buildDashboardData(store.records, {
+  const records = filterRecordsByMode(store.records, request.query?.mode)
+  return buildDashboardData(records, {
     sourceFile: store.imports.at(-1)?.filename ?? 'database',
   })
 })
@@ -129,9 +144,24 @@ app.get('/api/graph', async (request) => {
   return buildAppealsGraph(store.records, getFilters(request.query))
 })
 
-app.get('/api/references', async () => {
+app.get('/api/references', async (request) => {
   const store = await readStore()
-  return store.references ?? buildReferenceData(store.records)
+  const mode = getAppealModeFilter(request.query?.mode)
+  const modeRecords = filterRecordsByMode(store.records, mode)
+  const comparable = selectComparablePeriod(modeRecords)
+  const records = [...comparable.previous, ...comparable.current]
+  const references = buildReferenceData(records)
+  if (mode === 'chiefDoctor') {
+    references.sources = buildChannelReferences(records)
+  }
+  return {
+    ...references,
+    comparison: {
+      currentYear: comparable.currentYear,
+      previousYear: comparable.previousYear,
+      cutoffMonthDay: comparable.cutoffMonthDay,
+    },
+  }
 })
 
 app.get('/api/appeals', async (request) => {
@@ -139,7 +169,7 @@ app.get('/api/appeals', async (request) => {
   const limit = Math.min(Math.max(Number(request.query?.limit ?? 25), 1), 100000)
   const offset = Math.max(Number(request.query?.offset ?? 0), 0)
   const query = cleanQueryValue(request.query?.q).toLocaleLowerCase('ru-RU')
-  const records = store.records
+  const records = filterRecordsByMode(store.records, request.query?.mode)
     .slice()
     .sort((a, b) => b.dateIso.localeCompare(a.dateIso) || b.id.localeCompare(a.id))
     .filter((record) => {
@@ -152,6 +182,9 @@ app.get('/api/appeals', async (request) => {
         record.content,
         record.rubricCanonicalName,
         record.officialCategory,
+        record.registrationRoute,
+        record.sourceOrganization,
+        record.sourceChannel,
         record.manualFields?.responsible,
         record.manualFields?.notes,
         ...(record.manualFields?.departments ?? record.departments ?? []),
@@ -170,6 +203,37 @@ app.get('/api/appeals', async (request) => {
   }
 })
 
+function getAppealModeFilter(value) {
+  return value === 'external' ? 'external' : 'chiefDoctor'
+}
+
+function filterRecordsByMode(records, value) {
+  const mode = getAppealModeFilter(value)
+  return records.filter((record) => record.appealMode === mode)
+}
+
+function buildChannelReferences(records) {
+  const counts = new Map()
+  for (const record of records) {
+    const name = String(record.sourceChannel || record.delivery || 'Не указан').trim()
+    const item = counts.get(name) ?? { count: 0, years: {} }
+    item.count += 1
+    if (record.year) {
+      item.years[record.year] = (item.years[record.year] ?? 0) + 1
+    }
+    counts.set(name, item)
+  }
+  return [...counts.entries()]
+    .map(([name, item]) => ({
+      id: `channel:${crypto.createHash('sha1').update(name).digest('hex').slice(0, 12)}`,
+      name,
+      status: 'Канал поступления 07/19',
+      count: item.count,
+      years: item.years,
+    }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru'))
+}
+
 app.post('/api/appeals', async (request, reply) => {
   const record = normalizeManualRecord(request.body ?? {})
 
@@ -177,10 +241,10 @@ app.post('/api/appeals', async (request, reply) => {
     return reply.code(400).send({ error: 'content is required' })
   }
 
-  const store = await readStore()
-  store.records.push(record)
-  store.updatedAt = new Date().toISOString()
-  await writeStore(store)
+  await mutateStore((store) => {
+    assertUniqueAppealIds(store.records, [record])
+    store.records.push(record)
+  })
 
   return reply.code(201).send({ item: record })
 })
@@ -191,13 +255,18 @@ app.post('/api/appeals/bulk', async (request, reply) => {
   if (!items.length) {
     return reply.code(400).send({ error: 'items array is required and cannot be empty' })
   }
+  if (items.length > 10_000) {
+    return reply.code(400).send({ error: 'items array is too large' })
+  }
 
-  const store = await readStore()
   const newRecords = items.map(item => normalizeManualRecord(item))
-  
-  store.records.push(...newRecords)
-  store.updatedAt = new Date().toISOString()
-  await writeStore(store)
+  if (newRecords.some((record) => !record.content)) {
+    return reply.code(400).send({ error: 'content is required for every item' })
+  }
+  await mutateStore((store) => {
+    assertUniqueAppealIds(store.records, newRecords)
+    store.records.push(...newRecords)
+  })
 
   return reply.code(201).send({ count: newRecords.length })
 })
@@ -209,41 +278,42 @@ app.patch('/api/appeals', async (request, reply) => {
     return reply.code(400).send({ error: 'uid, id or appealKey is required' })
   }
 
-  const store = await readStore()
-  const now = new Date().toISOString()
-  const record = store.records.find((item) =>
-    uid ? item.uid === uid : appealKey ? item.appealKey === appealKey : item.id === id
-  )
+  const record = await mutateStore((store) => {
+    const current = store.records.find((item) =>
+      uid ? item.uid === uid : appealKey ? item.appealKey === appealKey : item.id === id
+    )
+    if (!current) return null
+
+    const now = new Date().toISOString()
+    const manualFields = pickManualFields(request.body ?? {})
+    if (isJustified === null) {
+      delete current.manualFields?.isJustified
+      delete manualFields.isJustified
+    } else if (isJustified !== undefined) {
+      manualFields.isJustified = Boolean(isJustified)
+    }
+    for (const key of ['responsible', 'notes']) {
+      if (request.body?.[key] !== undefined && !String(request.body[key]).trim()) {
+        delete current.manualFields?.[key]
+        delete manualFields[key]
+      }
+    }
+
+    current.manualFields = {
+      ...(current.manualFields ?? {}),
+      ...manualFields,
+    }
+    current.updatedAt = now
+    current.normalized = {
+      ...(current.normalized ?? {}),
+      manualUpdatedAt: now,
+    }
+    return current
+  })
 
   if (!record) {
     return reply.code(404).send({ error: 'appeal not found' })
   }
-
-  const manualFields = pickManualFields(request.body ?? {})
-  if (isJustified === null) {
-    delete record.manualFields?.isJustified
-    delete manualFields.isJustified
-  } else if (isJustified !== undefined) {
-    manualFields.isJustified = Boolean(isJustified)
-  }
-  for (const key of ['responsible', 'notes']) {
-    if (request.body?.[key] !== undefined && !String(request.body[key]).trim()) {
-      delete record.manualFields?.[key]
-      delete manualFields[key]
-    }
-  }
-
-  record.manualFields = {
-    ...(record.manualFields ?? {}),
-    ...manualFields,
-  }
-  record.updatedAt = now
-  record.normalized = {
-    ...(record.normalized ?? {}),
-    manualUpdatedAt: now,
-  }
-  store.updatedAt = now
-  await writeStore(store)
 
   return { item: record }
 })
@@ -264,26 +334,33 @@ app.post('/api/imports/excel', async (request, reply) => {
   const importId = crypto.randomUUID()
   const safeFilename = sanitizeFilename(file.filename || 'statistic.xls')
   const storedFilename = `${new Date().toISOString().replace(/[:.]/g, '-')}-${safeFilename}`
+  const rows = readAppealExcelRows(buffer)
+
+  if (!rows.length) {
+    return reply.code(400).send({
+      error: 'Excel file does not contain recognized appeal rows',
+    })
+  }
 
   await fs.mkdir(uploadDir, { recursive: true })
   await fs.writeFile(path.join(uploadDir, storedFilename), buffer)
 
-  const rows = readAppealExcelRows(buffer)
-  const store = await readStore()
-  const now = new Date().toISOString()
-  const merge = mergeExcelRowsIntoStore(store, rows, {
-    importId,
-    sourceFile: safeFilename,
-    storedFilename,
+  const merge = await mutateStore((store) => {
+    const result = mergeExcelRowsIntoStore(store, rows, {
+      importId,
+      sourceFile: safeFilename,
+      storedFilename,
+    })
+    return { nextStore: result.store, result }
   })
-  await writeStore(merge.store)
 
   return {
     importId,
-    uploadedAt: now,
+    uploadedAt: new Date().toISOString(),
     rowsCount: merge.importedRecords.length,
     addedCount: merge.addedCount,
     updatedCount: merge.updatedCount,
+    removedCount: merge.removedCount,
     manualFieldsPreserved: merge.preservedManualFieldsCount,
     existingRecordsKept: merge.keptExistingCount,
   }
@@ -336,6 +413,7 @@ app.post('/api/reports/comparison', async (request, reply) => {
 })
 
 await ensureStore()
+await migrateStoreFile()
 await app.listen({ port, host })
 
 async function ensureStore() {
@@ -368,17 +446,54 @@ async function readStore() {
   await ensureStore()
   const raw = await fs.readFile(storeFile, 'utf8')
   const parsed = JSON.parse(raw)
+  return migrateAppealsStore(parsed)
+}
+
+async function migrateStoreFile() {
+  const raw = await fs.readFile(storeFile, 'utf8')
+  const parsed = JSON.parse(raw)
   const migrated = migrateAppealsStore(parsed)
   if (parsed.version !== migrated.version || parsed.schema !== migrated.schema) {
     await writeStore(migrated)
   }
-  return migrated
 }
 
 async function writeStore(store) {
   await fs.mkdir(dataDir, { recursive: true })
   const migrated = migrateAppealsStore(store)
-  await fs.writeFile(storeFile, `${JSON.stringify(migrated, null, 2)}\n`, 'utf8')
+  const tempFile = `${storeFile}.${process.pid}.${crypto.randomUUID()}.tmp`
+  try {
+    await fs.writeFile(tempFile, `${JSON.stringify(migrated, null, 2)}\n`, 'utf8')
+    await fs.rename(tempFile, storeFile)
+  } catch (error) {
+    await fs.rm(tempFile, { force: true })
+    throw error
+  }
+}
+
+function mutateStore(mutator) {
+  const operation = storeMutationQueue.then(async () => {
+    const store = await readStore()
+    const value = await mutator(store)
+    const nextStore = value?.nextStore ?? store
+    nextStore.updatedAt = new Date().toISOString()
+    await writeStore(nextStore)
+    return value?.nextStore ? value.result : value
+  })
+  storeMutationQueue = operation.catch(() => {})
+  return operation
+}
+
+function assertUniqueAppealIds(existingRecords, newRecords) {
+  const ids = new Set(existingRecords.map((record) => record.id).filter(Boolean))
+  for (const record of newRecords) {
+    if (ids.has(record.id)) {
+      const error = new Error(`appeal id already exists: ${record.id}`)
+      error.statusCode = 409
+      throw error
+    }
+    ids.add(record.id)
+  }
 }
 
 function sanitizeFilename(filename) {
@@ -403,8 +518,22 @@ function getFilters(query = {}) {
     to: cleanQueryValue(query.to),
     applicant: cleanQueryValue(query.applicant),
     department: cleanQueryValue(query.department),
-    status: cleanQueryValue(query.status),
   }
+}
+
+function getLoginAttempt(clientKey) {
+  const current = loginAttempts.get(clientKey)
+  if (!current || current.resetAt <= Date.now()) {
+    return { count: 0, resetAt: Date.now() + loginWindowMs }
+  }
+  return current
+}
+
+function recordFailedLogin(clientKey, attempt) {
+  loginAttempts.set(clientKey, {
+    count: attempt.count + 1,
+    resetAt: attempt.resetAt,
+  })
 }
 
 function cleanQueryValue(value) {

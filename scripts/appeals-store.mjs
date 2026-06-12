@@ -11,7 +11,19 @@ import {
   normalizeExcelRows as normalizeStrictExcelRows,
 } from './complaints-parser-strict.mjs'
 
-export const STORE_VERSION = 5
+export const STORE_VERSION = 7
+
+const APPEAL_MODES = {
+  chiefDoctor: 'chiefDoctor',
+  external: 'external',
+}
+
+const REGISTRATION_ROUTES = {
+  chiefDoctor: 'На имя главного врача (07/19)',
+  department: 'Депздрав Югры (07-*)',
+  governor: 'Губернатор Югры (01-*)',
+  other: 'Другой контур регистрации',
+}
 
 const COLUMN_ALIASES = {
   id: ['№ РК', 'Номер РК', 'Рег. номер', 'Регистрационный номер'],
@@ -60,7 +72,6 @@ const MANUAL_FIELD_KEYS = [
   'isJustified',
   'justified',
   'notes',
-  'statusOverride',
 ]
 
 const DEPARTMENT_RULES = [
@@ -275,10 +286,13 @@ export function mergeExcelRowsIntoStore(store, rows, importMeta) {
     }
   })
 
-  const untouchedExisting = currentStore.records.filter((record) => {
-    if (record.origin !== 'excel') return true
-    return !importedKeys.has(getRecordKey(record))
-  })
+  const manualRecords = currentStore.records.filter(
+    (record) => record.origin !== 'excel'
+  )
+  const removedCount = currentStore.records.filter(
+    (record) =>
+      record.origin === 'excel' && !importedKeys.has(getRecordKey(record))
+  ).length
 
   const nextStore = {
     ...currentStore,
@@ -295,10 +309,11 @@ export function mergeExcelRowsIntoStore(store, rows, importMeta) {
         duplicateCount,
         addedCount,
         updatedCount,
+        removedCount,
         preservedManualFieldsCount,
       },
     ],
-    records: [...mergedImported, ...untouchedExisting].sort(compareAppeals),
+    records: [...mergedImported, ...manualRecords].sort(compareAppeals),
   }
   nextStore.references = buildReferenceData(nextStore.records)
 
@@ -308,9 +323,10 @@ export function mergeExcelRowsIntoStore(store, rows, importMeta) {
     importedRowsCount: importedRows.length,
     addedCount,
     updatedCount,
+    removedCount,
     duplicateCount,
     preservedManualFieldsCount,
-    keptExistingCount: untouchedExisting.length,
+    keptExistingCount: manualRecords.length,
   }
 }
 
@@ -493,7 +509,9 @@ function buildSourceReferences(records) {
   )
 
   for (const record of records) {
-    const name = canonicalizeAppealSource(record.documentSource || record.source)
+    const name = canonicalizeAppealSource(
+      record.sourceOrganization || record.documentSource || record.source
+    )
     const item = sources.get(name)
     if (!item) continue
     item.count += 1
@@ -544,9 +562,15 @@ export function buildAppealsAnalytics(records, filters = {}) {
     dateRange: getDateRange(appeals),
     byYear: countList(appeals, (record) => String(record.year || 'Не указан')),
     byMonth: countList(appeals, (record) => record.month || 'Не указан'),
-    bySource: countList(appeals, (record) => record.documentSource || record.source),
+    bySource: countList(
+      appeals.filter((record) => record.appealMode === APPEAL_MODES.external),
+      (record) => record.sourceOrganization || record.documentSource || record.source
+    ),
     byDelivery: countList(appeals, (record) => record.delivery || 'Не указан'),
-    byStatus: countList(appeals, (record) => getEffectiveStatus(record)),
+    byChiefDoctorChannel: countList(
+      appeals.filter((record) => record.appealMode === APPEAL_MODES.chiefDoctor),
+      (record) => record.sourceChannel || record.delivery || 'Не указан'
+    ),
     byDeadlineStatus: countList(appeals, (record) => record.deadlineStatus || 'unknown'),
     byDepartment: countList(appeals, (record) => getEffectiveDepartments(record), {
       multiple: true,
@@ -734,10 +758,9 @@ function normalizeAppealRow(row, metadata) {
   const completedAtRaw = clean(getRawField(raw, 'completedAt'))
   const deadlineAt = parseFlexibleDate(deadlineRaw)
   const completedAt = parseFlexibleDate(completedAtRaw)
-  const status = inferStatus({
+  const isDiscontinued = inferDiscontinued({
     rawRubric,
     content,
-    completedAt,
     strictRecord,
   })
   const departments = extractDepartments([content, rawRubric, recipient, supportDocument].join(' '))
@@ -783,8 +806,19 @@ function normalizeAppealRow(row, metadata) {
   )
   const documentSource = selectAppealSource(
     detectedDocumentSource,
-    existingDocumentSource
+    existingDocumentSource,
+    hasSourceEvidence({
+      supportDocument,
+      sourceSystem,
+      siteAppealNumber,
+      posMessageNumber,
+    })
   )
+  const registration = resolveRegistration(id, groupIndex)
+  const sourceOrganization =
+    registration.appealMode === APPEAL_MODES.chiefDoctor
+      ? SOURCE_NAMES.direct
+      : documentSource
 
   return {
     ...strictRecord,
@@ -805,7 +839,11 @@ function normalizeAppealRow(row, metadata) {
     profile: rubricCanonicalName || 'Без рубрики',
     rubricSource,
     intent: strictRecord.intent || rubricCanonicalName || category,
-    source: documentSource,
+    source: sourceOrganization,
+    sourceOrganization,
+    sourceChannel: delivery || 'Не указан',
+    appealMode: registration.appealMode,
+    registrationRoute: registration.registrationRoute,
     recipient,
     rawRubric,
     rubricCode: resolvedRubricCode,
@@ -830,22 +868,20 @@ function normalizeAppealRow(row, metadata) {
     documentTopic: strictRecord.documentTopic || category,
     officialCategory: category,
     departments,
-    status,
     deadlineRaw,
     deadlineAt,
     completedAtRaw,
     completedAt,
-    deadlineStatus: getDeadlineStatus({ deadlineAt, completedAt, status }),
+    deadlineStatus: getDeadlineStatus({ deadlineAt, completedAt, isDiscontinued }),
     raw,
     normalized: {
       applicant,
       affectedPeople,
       departments,
       category,
-      status,
       deadlineAt,
       completedAt,
-      deadlineStatus: getDeadlineStatus({ deadlineAt, completedAt, status }),
+      deadlineStatus: getDeadlineStatus({ deadlineAt, completedAt, isDiscontinued }),
     },
     origin: 'excel',
     sourceFile: metadata.sourceFile ?? '',
@@ -907,7 +943,11 @@ function migrateRecord(record) {
   const rubricCanonicalName = resolvedRubric.name
   const rubricTheme = getRubricTheme(rubricCanonicalName)
   const rubricSource = tableRubric ? 'table' : 'classified'
-  const status = record.status ?? inferStatus({ rawRubric, content, strictRecord: record })
+  const isDiscontinued = inferDiscontinued({
+    rawRubric,
+    content,
+    strictRecord: record,
+  })
   const detectedDocumentSource = resolveAppealDocumentSource({
     id: record.id || record.rkNumber,
     supportDocument,
@@ -925,8 +965,22 @@ function migrateRecord(record) {
   )
   const documentSource = selectAppealSource(
     detectedDocumentSource,
-    existingDocumentSource
+    existingDocumentSource,
+    hasSourceEvidence({
+      supportDocument,
+      sourceSystem: record.sourceSystem,
+      siteAppealNumber: record.siteAppealNumber,
+      posMessageNumber: record.posMessageNumber,
+    })
   )
+  const registration = resolveRegistration(
+    record.id || record.rkNumber,
+    record.groupIndex
+  )
+  const sourceOrganization =
+    registration.appealMode === APPEAL_MODES.chiefDoctor
+      ? SOURCE_NAMES.direct
+      : documentSource
   // Формат ключа пересчитываем всегда (миграция со старого `год:№РК:дата`),
   // чтобы uid/appealKey были стабильны между выгрузками.
   const appealKey = `${year || 'unknown'}:${record.id || record.rkNumber || 'no-rk'}`
@@ -961,16 +1015,20 @@ function migrateRecord(record) {
           score: classifiedRubric.score,
           matchedRule: classifiedRubric.matchedRule,
         },
-    source: documentSource,
+    source: sourceOrganization,
+    sourceOrganization,
+    sourceChannel: clean(record.delivery) || 'Не указан',
+    appealMode: registration.appealMode,
+    registrationRoute: registration.registrationRoute,
     documentSource,
     departments,
-    status,
+    status: undefined,
     deadlineStatus:
       record.deadlineStatus ??
       getDeadlineStatus({
         deadlineAt: record.deadlineAt,
         completedAt: record.completedAt,
-        status,
+        isDiscontinued,
       }),
     raw: record.raw ?? {},
     normalized: {
@@ -979,7 +1037,6 @@ function migrateRecord(record) {
       affectedPeople: record.affectedPeople ?? extractAffectedPeople(content),
       departments,
       category,
-      status,
     },
     manualFields: record.manualFields ?? {},
     origin: record.origin ?? 'excel',
@@ -1159,67 +1216,50 @@ function resolveOfficialRubric(name, code = '') {
 function resolveAppealDocumentSource({
   id,
   supportDocument,
-  recipient,
   groupIndex,
-  groupDocuments,
-  delivery,
   siteAppealNumber,
   posMessageNumber,
   sourceSystem,
-  content,
 }) {
-  const text = [
-    supportDocument,
-    recipient,
-    groupIndex,
-    groupDocuments,
-    delivery,
-    siteAppealNumber,
-    posMessageNumber,
-    sourceSystem,
-    content,
-  ]
+  const senderText = [supportDocument, sourceSystem]
     .map(clean)
     .join(' ')
     .toLocaleLowerCase('ru-RU')
   const idText = clean(id)
   const groupIndexText = clean(groupIndex)
 
-  if (/сообщение\s+пос|\bпос\b|платформ\w+\s+обратн\w+\s+связ/.test(text)) {
+  if (clean(siteAppealNumber) || clean(posMessageNumber)) {
     return SOURCE_NAMES.direct
   }
-  if (/сообщество\s+вк|вконтакте|\bvk\b|послушайте[, ]+\s*доктор|паблик/.test(text)) {
+  if (/сообщение\s+пос|\bпос\b|платформ[а-яё]*\s+обратн[а-яё]*\s+связ/.test(senderText)) {
     return SOURCE_NAMES.direct
   }
-  if (/альфа|согаз|капитал\s+мс|страхов|страхован|тфомс|тофомс|\bомс\b|обязательн\w+\s+медицинск\w+\s+страхован/.test(text)) {
+  if (/сообщество\s+вк|вконтакте|\bvk\b|послушайте[, ]+\s*доктор|паблик/.test(senderText)) {
+    return SOURCE_NAMES.direct
+  }
+  if (/альфа|согаз|капитал\s+мс|страхов|тфомс|тофомс|\bомс\b|обязательн[а-яё]*\s+медицинск[а-яё]*\s+страхован/.test(senderText)) {
     return SOURCE_NAMES.insurance
   }
-  if (/минздрав|министерство\s+здравоохранения\s+(российской\s+федерации|рф)/.test(text)) {
+  if (/минздрав|министерство\s+здравоохранения\s+(российской\s+федерации|рф)/.test(senderText)) {
     return SOURCE_NAMES.ministry
   }
-  if (/управление\s+президента|администрац\w*\s+президента/.test(text)) {
-    return SOURCE_NAMES.chiefDoctor
+  if (/управление\s+президента|администрац[а-яё]*\s+президента/.test(senderText)) {
+    return SOURCE_NAMES.president
   }
-  if (/аппарат\s+губернатора|правительств\w*\s+ханты-мансийского|губернатор/.test(text)) {
+  if (/аппарат\s+губернатора|правительств[а-яё]*\s+ханты-мансийского|губернатор/.test(senderText)) {
     return SOURCE_NAMES.governor
   }
-  if (/департамент\s+здравоохранения|депздрав|паськов\s+роман/.test(text)) {
+  if (/департамент\s+здравоохранения|депздрав|паськов\s+роман/.test(senderText)) {
     return SOURCE_NAMES.department
   }
-  if (/росздравнадзор|служб\w*\s+по\s+надзор|территориальн\w+\s+орган.*надзор/.test(text)) {
+  if (/росздравнадзор|служб[а-яё]*\s+по\s+надзор|территориальн[а-яё]*\s+орган.*надзор/.test(senderText)) {
     return SOURCE_NAMES.oversight
   }
-  if (/прокуратур/.test(text)) return SOURCE_NAMES.prosecutor
-  if (/уполномоченн\w*\s+по\s+прав|общественн\w+\s+палат/.test(text)) {
+  if (/прокуратур/.test(senderText)) return SOURCE_NAMES.prosecutor
+  if (/уполномоченн[а-яё]*\s+по\s+прав|общественн[а-яё]*\s+палат/.test(senderText)) {
     return SOURCE_NAMES.publicRights
   }
-  if (
-    /личн\w+\s+при[её]м|электронн\w+\s+почт|\be-?mail\b|почт\w+|курьер|епгу|госуслуг|непосредственно\s+от\s+заявител/.test(
-      text
-    )
-  ) {
-    return SOURCE_NAMES.direct
-  }
+  if (senderText) return SOURCE_NAMES.unknown
 
   if (/^07\/19/i.test(idText) || /^07\/19/i.test(groupIndexText)) {
     return SOURCE_NAMES.chiefDoctor
@@ -1238,15 +1278,29 @@ function isResolvedSource(source) {
   return source && source !== SOURCE_NAMES.unknown
 }
 
-function selectAppealSource(detectedSource, existingSource) {
-  if (isResolvedSource(existingSource) && existingSource !== SOURCE_NAMES.direct) {
-    return existingSource
-  }
-  if (isResolvedSource(detectedSource) && detectedSource !== SOURCE_NAMES.direct) {
+function selectAppealSource(detectedSource, existingSource, sourceEvidence) {
+  if (sourceEvidence && isResolvedSource(detectedSource)) {
     return detectedSource
+  }
+  if (isResolvedSource(existingSource)) {
+    return existingSource
   }
   if (isResolvedSource(detectedSource)) return detectedSource
   return existingSource
+}
+
+function hasSourceEvidence({
+  supportDocument,
+  sourceSystem,
+  siteAppealNumber,
+  posMessageNumber,
+}) {
+  return Boolean(
+    clean(supportDocument) ||
+      clean(sourceSystem) ||
+      clean(siteAppealNumber) ||
+      clean(posMessageNumber)
+  )
 }
 
 function canonicalizeAppealSource(value) {
@@ -1267,7 +1321,10 @@ function canonicalizeAppealSource(value) {
     return SOURCE_NAMES.insurance
   }
   if (/прокуратур/.test(lower)) return SOURCE_NAMES.prosecutor
-  if (/главн\w+\s+врач|ссту|управление\s+президента|администрац\w*\s+президента/.test(lower)) {
+  if (/управление\s+президента|администрац\w*\s+президента/.test(lower)) {
+    return SOURCE_NAMES.president
+  }
+  if (/главн\w+\s+врач|ссту/.test(lower)) {
     return SOURCE_NAMES.chiefDoctor
   }
   if (/росздравнадзор|роспотребнадзор|надзорн\w+\s+орган|служб\w*\s+по\s+надзор/.test(lower)) {
@@ -1281,6 +1338,34 @@ function canonicalizeAppealSource(value) {
   }
 
   return SOURCE_NAMES.unknown
+}
+
+function resolveRegistration(id, groupIndex = '') {
+  const idText = clean(id)
+  const indexText = clean(groupIndex)
+
+  if (/^07\/19/i.test(idText) || /^07\/19/i.test(indexText)) {
+    return {
+      appealMode: APPEAL_MODES.chiefDoctor,
+      registrationRoute: REGISTRATION_ROUTES.chiefDoctor,
+    }
+  }
+  if (/^07-(ОГ|ЗИ|НО)/i.test(idText) || /^07\b/i.test(indexText)) {
+    return {
+      appealMode: APPEAL_MODES.external,
+      registrationRoute: REGISTRATION_ROUTES.department,
+    }
+  }
+  if (/^01-/i.test(idText) || /^01\b|^01-/i.test(indexText)) {
+    return {
+      appealMode: APPEAL_MODES.external,
+      registrationRoute: REGISTRATION_ROUTES.governor,
+    }
+  }
+  return {
+    appealMode: APPEAL_MODES.external,
+    registrationRoute: REGISTRATION_ROUTES.other,
+  }
 }
 
 function parseCorrespondent(value) {
@@ -1371,19 +1456,17 @@ function classifyComplaintCategory({ content, profile = '', documentTopic = '' }
   return 'Иные обращения'
 }
 
-function inferStatus({ rawRubric = '', content = '', completedAt = '', strictRecord = {} }) {
+function inferDiscontinued({ rawRubric = '', content = '', strictRecord = {} }) {
   const text = [rawRubric, content, strictRecord.profile, strictRecord.documentTopic]
     .map(clean)
     .join(' ')
     .toLowerCase()
-  if (/прекращен|прекращение|отзыв|отозван/.test(text)) return 'withdrawn'
-  if (completedAt) return 'closed'
-  return 'active'
+  return /прекращен|прекращение|отзыв|отозван/.test(text)
 }
 
-function getDeadlineStatus({ deadlineAt, completedAt, status }) {
+function getDeadlineStatus({ deadlineAt, completedAt, isDiscontinued }) {
   if (!deadlineAt) return 'unknown'
-  if (status === 'withdrawn') return 'withdrawn'
+  if (isDiscontinued) return 'withdrawn'
   if (completedAt) return completedAt > deadlineAt ? 'closed_overdue' : 'closed_on_time'
   return new Date(`${deadlineAt}T23:59:59`).getTime() < Date.now()
     ? 'overdue'
@@ -1404,13 +1487,8 @@ function filterAppeals(records, filters = {}) {
       const departments = getEffectiveDepartments(record)
       if (!departments.includes(filters.department)) return false
     }
-    if (filters.status && getEffectiveStatus(record) !== filters.status) return false
     return true
   })
-}
-
-function getEffectiveStatus(record) {
-  return record.manualFields?.statusOverride || record.status || 'active'
 }
 
 function getEffectiveCategory(record) {
@@ -1604,7 +1682,6 @@ function toAppealSummary(record) {
     content: record.content,
     applicant: record.applicant?.name,
     location: record.location,
-    status: getEffectiveStatus(record),
     profile: record.rubricCanonicalName || 'Без рубрики',
     rubricTheme: record.rubricTheme || 'Тематика не указана',
     rubricCode: record.rubricCode || '',

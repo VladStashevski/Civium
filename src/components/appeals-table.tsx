@@ -3,6 +3,7 @@ import {
   type Column,
   type ColumnDef,
   type ColumnFiltersState,
+  type ColumnSizingState,
   type FilterFn,
   type SortingState,
   type VisibilityState,
@@ -40,6 +41,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -67,7 +69,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useAppeals } from '@/hooks/use-appeals'
-import type { Appeal } from '@/lib/api'
+import type { Appeal, AppealMode } from '@/lib/api'
 import { formatDateShort } from '@/lib/appeals-data'
 import { cn } from '@/lib/utils'
 
@@ -77,13 +79,13 @@ const COLUMN_LABELS: Record<string, string> = {
   content: 'Содержание',
   correspondent: 'Корреспондент',
   profile: 'Рубрика',
-  source: 'Источник',
+  sourceView: 'Источник / канал',
+  registrationRoute: 'Контур регистрации',
   location: 'Город',
   documentTopic: 'Тема',
   officialCategory: 'Категория',
   departments: 'Отделения',
   justified: 'Обоснованность',
-  status: 'Статус',
   notes: 'Комментарий',
 }
 
@@ -108,11 +110,13 @@ function TruncatedCell({ text, className }: { text?: string; className?: string 
         <button
           type="button"
           className={cn(
-            'block max-w-[380px] cursor-pointer truncate text-left underline-offset-2 decoration-dotted hover:underline',
+            'block w-full min-w-0 max-w-full cursor-pointer overflow-hidden text-left underline-offset-2 decoration-dotted hover:underline',
             className,
           )}
         >
-          {text}
+          <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap">
+            {text}
+          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -136,11 +140,11 @@ function SortHeader({
     <Button
       variant="ghost"
       size="sm"
-      className="-ml-2 h-8"
+      className="-ml-2 h-8 max-w-full min-w-0 justify-start overflow-hidden"
       onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
     >
-      {children}
-      <CaretUpDownIcon className="ml-1 size-3.5 opacity-60" />
+      <span className="truncate">{children}</span>
+      <CaretUpDownIcon className="ml-1 size-3.5 shrink-0 opacity-60" />
     </Button>
   )
 }
@@ -148,6 +152,9 @@ function SortHeader({
 const columns: ColumnDef<Appeal>[] = [
   {
     accessorKey: 'id',
+    size: 80,
+    minSize: 64,
+    maxSize: 140,
     header: ({ column }) => <SortHeader column={column}>№</SortHeader>,
     cell: ({ row }) => (
       <span className="font-medium tabular-nums whitespace-nowrap">
@@ -157,6 +164,9 @@ const columns: ColumnDef<Appeal>[] = [
   },
   {
     accessorKey: 'dateIso',
+    size: 110,
+    minSize: 96,
+    maxSize: 150,
     header: ({ column }) => <SortHeader column={column}>Дата</SortHeader>,
     cell: ({ row }) => (
       <span className="tabular-nums whitespace-nowrap text-muted-foreground">
@@ -166,40 +176,73 @@ const columns: ColumnDef<Appeal>[] = [
   },
   {
     accessorKey: 'content',
+    size: 280,
+    minSize: 140,
+    maxSize: 600,
     header: 'Содержание',
     cell: ({ row }) => <TruncatedCell text={row.original.content} />,
   },
   {
     accessorKey: 'correspondent',
+    size: 170,
+    minSize: 120,
+    maxSize: 420,
     header: 'Корреспондент',
     cell: ({ row }) => (
-      <TruncatedCell text={row.original.correspondent} className="max-w-[180px]" />
+      <TruncatedCell text={row.original.correspondent} />
     ),
   },
   {
     accessorKey: 'profile',
+    size: 190,
+    minSize: 120,
+    maxSize: 480,
     header: 'Рубрика',
     filterFn: inArray,
     cell: ({ row }) => (
       <TruncatedCell
         text={row.original.profile}
-        className="max-w-[200px] text-muted-foreground"
+        className="text-muted-foreground"
       />
     ),
   },
   {
-    accessorKey: 'source',
-    header: 'Источник',
+    id: 'sourceView',
+    size: 180,
+    minSize: 120,
+    maxSize: 420,
+    accessorFn: (appeal) =>
+      appeal.appealMode === 'chiefDoctor'
+        ? appeal.sourceChannel
+        : appeal.sourceOrganization,
+    header: 'Источник / канал',
+    filterFn: inArray,
+    cell: ({ getValue }) => (
+      <TruncatedCell
+        text={getValue<string>()}
+        className="text-muted-foreground"
+      />
+    ),
+  },
+  {
+    accessorKey: 'registrationRoute',
+    size: 170,
+    minSize: 120,
+    maxSize: 380,
+    header: 'Контур регистрации',
     filterFn: inArray,
     cell: ({ row }) => (
       <TruncatedCell
-        text={row.original.source}
-        className="max-w-[200px] text-muted-foreground"
+        text={row.original.registrationRoute}
+        className="text-muted-foreground"
       />
     ),
   },
   {
     accessorKey: 'location',
+    size: 130,
+    minSize: 90,
+    maxSize: 240,
     header: 'Город',
     cell: ({ row }) => (
       <span className="whitespace-nowrap text-muted-foreground">
@@ -209,35 +252,47 @@ const columns: ColumnDef<Appeal>[] = [
   },
   {
     accessorKey: 'documentTopic',
+    size: 190,
+    minSize: 120,
+    maxSize: 480,
     header: 'Тема',
     cell: ({ row }) => (
       <TruncatedCell
         text={row.original.documentTopic}
-        className="max-w-[200px] text-muted-foreground"
+        className="text-muted-foreground"
       />
     ),
   },
   {
     accessorKey: 'officialCategory',
+    size: 180,
+    minSize: 120,
+    maxSize: 420,
     header: 'Категория',
     filterFn: inArray,
     cell: ({ row }) => (
       <TruncatedCell
         text={row.original.officialCategory}
-        className="max-w-[200px] text-muted-foreground"
+        className="text-muted-foreground"
       />
     ),
   },
   {
     id: 'departments',
+    size: 190,
+    minSize: 120,
+    maxSize: 480,
     accessorFn: (a) => getDepartments(a).join(', '),
     header: ({ column }) => <SortHeader column={column}>Отделения</SortHeader>,
     cell: ({ getValue }) => (
-      <TruncatedCell text={getValue<string>()} className="max-w-[200px]" />
+      <TruncatedCell text={getValue<string>()} />
     ),
   },
   {
     id: 'justified',
+    size: 160,
+    minSize: 140,
+    maxSize: 220,
     accessorFn: (a) =>
       a.manualFields?.isJustified === true
         ? 'Обоснованно'
@@ -264,36 +319,25 @@ const columns: ColumnDef<Appeal>[] = [
     },
   },
   {
-    accessorKey: 'status',
-    header: 'Статус',
-    filterFn: inArray,
-    cell: ({ row }) =>
-      row.original.status === 'withdrawn' ? (
-        <Badge variant="outline" className="gap-1.5 font-normal text-muted-foreground">
-          <span className="size-1.5 rounded-full bg-zinc-400" />
-          Отозвано
-        </Badge>
-      ) : (
-        <Badge variant="outline" className="gap-1.5 font-normal">
-          <span className="size-1.5 rounded-full bg-emerald-500" />
-          Активно
-        </Badge>
-      ),
-  },
-  {
     id: 'notes',
+    size: 190,
+    minSize: 120,
+    maxSize: 480,
     accessorFn: (a) => a.manualFields?.notes ?? '',
     header: 'Комментарий',
     enableSorting: false,
     cell: ({ row }) => (
       <TruncatedCell
         text={row.original.manualFields?.notes}
-        className="max-w-[200px]"
       />
     ),
   },
   {
     id: 'actions',
+    size: 52,
+    minSize: 52,
+    maxSize: 52,
+    enableResizing: false,
     enableHiding: false,
     enableSorting: false,
     header: () => <span className="sr-only">Действия</span>,
@@ -302,16 +346,11 @@ const columns: ColumnDef<Appeal>[] = [
 ]
 
 const DEFAULT_HIDDEN: VisibilityState = {
-  source: false,
+  registrationRoute: false,
   location: false,
   documentTopic: false,
   officialCategory: false,
 }
-
-const STATUS_OPTIONS: FacetOption[] = [
-  { label: 'Активно', value: 'active' },
-  { label: 'Отозвано', value: 'withdrawn' },
-]
 
 const JUSTIFIED_OPTIONS: FacetOption[] = [
   { label: 'Обоснованно', value: 'Обоснованно' },
@@ -319,41 +358,72 @@ const JUSTIFIED_OPTIONS: FacetOption[] = [
   { label: 'Не задано', value: '' },
 ]
 
-function uniqueOptions(
-  items: Appeal[],
-  key: 'source' | 'profile' | 'officialCategory',
-): FacetOption[] {
+function uniqueOptions(items: Appeal[], getValue: (item: Appeal) => string): FacetOption[] {
   const set = new Set<string>()
-  for (const it of items) if (it[key]) set.add(it[key])
+  for (const item of items) {
+    const value = getValue(item)
+    if (value) set.add(value)
+  }
   return [...set]
     .sort((a, b) => a.localeCompare(b, 'ru'))
     .map((v) => ({ label: v, value: v }))
 }
 
-export function AppealsTable() {
-  const { data, isPending } = useAppeals()
+export function AppealsTable({ mode }: { mode: AppealMode }) {
+  const { data, isPending } = useAppeals(mode)
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = React.useState('')
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
-  const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>(DEFAULT_HIDDEN)
+  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({})
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(
+    () => ({
+      ...DEFAULT_HIDDEN,
+      registrationRoute: mode === 'external',
+    }),
+  )
 
-  const rows = React.useMemo(() => data?.items ?? [], [data])
-  const sourceOptions = React.useMemo(() => uniqueOptions(rows, 'source'), [rows])
-  const profileOptions = React.useMemo(() => uniqueOptions(rows, 'profile'), [rows])
+  const allRows = React.useMemo(() => data?.items ?? [], [data])
+  const rows = React.useMemo(
+    () => allRows.filter((appeal) => appeal.appealMode === mode),
+    [allRows, mode],
+  )
+  const sourceOptions = React.useMemo(
+    () =>
+      uniqueOptions(rows, (appeal) =>
+        mode === 'chiefDoctor' ? appeal.sourceChannel : appeal.sourceOrganization,
+      ),
+    [rows, mode],
+  )
+  const routeOptions = React.useMemo(
+    () => uniqueOptions(rows, (appeal) => appeal.registrationRoute),
+    [rows],
+  )
+  const profileOptions = React.useMemo(
+    () => uniqueOptions(rows, (appeal) => appeal.profile),
+    [rows],
+  )
   const categoryOptions = React.useMemo(
-    () => uniqueOptions(rows, 'officialCategory'),
+    () => uniqueOptions(rows, (appeal) => appeal.officialCategory),
     [rows],
   )
 
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, globalFilter, columnFilters, columnVisibility },
+    state: {
+      sorting,
+      globalFilter,
+      columnFilters,
+      columnVisibility,
+      columnSizing,
+    },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnSizingChange: setColumnSizing,
+    columnResizeMode: 'onChange',
+    enableColumnResizing: true,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -367,13 +437,25 @@ export function AppealsTable() {
   const total = table.getFilteredRowModel().rows.length
   const isFiltered = columnFilters.length > 0
 
+  React.useEffect(() => {
+    setColumnFilters([])
+    setGlobalFilter('')
+    setColumnVisibility((current) => ({
+      ...current,
+      registrationRoute: mode === 'external',
+    }))
+    table.setPageIndex(0)
+  }, [mode, table])
+
   return (
     <div className="px-4 lg:px-6">
       <Card>
         <CardHeader>
           <CardTitle>Все обращения</CardTitle>
           <CardDescription>
-            Полный список обращений из базы — {data?.total ?? '…'}
+            {mode === 'chiefDoctor'
+              ? '07/19: обращения на имя главного врача по каналам поступления'
+              : '07-/01-: внешние обращения по источникам поступления'}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -385,10 +467,17 @@ export function AppealsTable() {
               className="h-9 w-full max-w-xs"
             />
             <FacetedFilter
-              column={table.getColumn('source')}
-              title="Источник"
+              column={table.getColumn('sourceView')}
+              title={mode === 'chiefDoctor' ? 'Канал' : 'Источник'}
               options={sourceOptions}
             />
+            {mode === 'external' && (
+              <FacetedFilter
+                column={table.getColumn('registrationRoute')}
+                title="Контур"
+                options={routeOptions}
+              />
+            )}
             <FacetedFilter
               column={table.getColumn('profile')}
               title="Рубрика"
@@ -398,11 +487,6 @@ export function AppealsTable() {
               column={table.getColumn('officialCategory')}
               title="Категория"
               options={categoryOptions}
-            />
-            <FacetedFilter
-              column={table.getColumn('status')}
-              title="Статус"
-              options={STATUS_OPTIONS}
             />
             <FacetedFilter
               column={table.getColumn('justified')}
@@ -430,6 +514,10 @@ export function AppealsTable() {
                 <DropdownMenuContent align="end" className="w-48">
                   <DropdownMenuLabel>Показать колонки</DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => table.resetColumnSizing()}>
+                    Сбросить ширину
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   {table
                     .getAllColumns()
                     .filter((c) => c.getCanHide())
@@ -448,18 +536,47 @@ export function AppealsTable() {
           </div>
 
           <div className="overflow-hidden rounded-lg border">
-            <Table>
+            <Table
+              className="table-fixed"
+              style={{
+                width: table.getTotalSize(),
+                minWidth: '100%',
+              }}
+            >
               <TableHeader>
                 {table.getHeaderGroups().map((hg) => (
                   <TableRow key={hg.id}>
                     {hg.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
+                      <TableHead
+                        key={header.id}
+                        className="relative overflow-hidden"
+                        style={{ width: header.getSize() }}
+                      >
+                        <div className="min-w-0 overflow-hidden whitespace-nowrap">
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                        </div>
+                        {header.column.getCanResize() && (
+                          <div
+                            role="separator"
+                            aria-orientation="vertical"
+                            aria-label={`Изменить ширину колонки ${
+                              COLUMN_LABELS[header.column.id] ?? header.column.id
+                            }`}
+                            onDoubleClick={() => header.column.resetSize()}
+                            onMouseDown={header.getResizeHandler()}
+                            onTouchStart={header.getResizeHandler()}
+                            className={cn(
+                              'absolute top-0 right-0 z-10 h-full w-2 cursor-col-resize touch-none select-none after:absolute after:top-2 after:right-0 after:bottom-2 after:w-px after:bg-border hover:after:bg-primary',
+                              header.column.getIsResizing() &&
+                                'after:w-0.5 after:bg-primary',
                             )}
+                          />
+                        )}
                       </TableHead>
                     ))}
                   </TableRow>
@@ -478,7 +595,11 @@ export function AppealsTable() {
                   table.getRowModel().rows.map((row) => (
                     <TableRow key={row.id}>
                       {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
+                        <TableCell
+                          key={cell.id}
+                          className="min-w-0 overflow-hidden"
+                          style={{ width: cell.column.getSize() }}
+                        >
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext(),
@@ -503,7 +624,7 @@ export function AppealsTable() {
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-muted-foreground">
-              Найдено: {total} из {data?.total ?? 0}
+              Найдено: {total} из {rows.length}
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">

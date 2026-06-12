@@ -16,7 +16,10 @@ export function LoginForm() {
     e.preventDefault()
     loginMutation.mutate(
       { email: email.trim(), password },
-      { onSuccess: () => navigate({ to: '/' }) },
+      {
+        onSuccess: () =>
+          navigate({ to: '/', search: { mode: 'chiefDoctor' } }),
+      },
     )
   }
 

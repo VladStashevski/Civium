@@ -6,6 +6,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -17,21 +22,127 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useReferences } from '@/hooks/use-appeals'
+import type { AppealMode, RefItem } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
-function CountCell({ value }: { value: number }) {
+function TextCell({
+  value,
+  className,
+}: {
+  value?: string
+  className?: string
+}) {
+  const text = value || '—'
+
   return (
-    <TableCell className="w-20 text-right tabular-nums text-muted-foreground">
+    <TableCell className={cn('min-w-0 overflow-hidden', className)}>
+      {value ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="block w-full min-w-0 max-w-full cursor-pointer overflow-hidden text-left underline-offset-2 decoration-dotted hover:underline"
+              aria-label={`Показать полностью: ${text}`}
+            >
+              <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                {text}
+              </span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="start"
+            className="max-h-80 w-auto max-w-md overflow-auto"
+          >
+            <p className="text-sm break-words whitespace-pre-wrap">{text}</p>
+          </PopoverContent>
+        </Popover>
+      ) : (
+        <span className="text-muted-foreground/60">—</span>
+      )}
+    </TableCell>
+  )
+}
+
+function CountCell({ value, strong = false }: { value: number; strong?: boolean }) {
+  return (
+    <TableCell
+      className={cn(
+        'w-20 text-right tabular-nums',
+        strong ? 'font-medium text-foreground' : 'text-muted-foreground',
+      )}
+    >
       {value}
     </TableCell>
   )
 }
 
-function byCountDesc<T extends { count: number }>(rows: T[]): T[] {
-  return [...rows].sort((a, b) => b.count - a.count)
+function yearCount(item: RefItem, year: number): number {
+  return item.years?.[String(year)] ?? 0
 }
 
-export function ReferencesView() {
-  const { data, isPending } = useReferences()
+function byCurrentYear<T extends RefItem>(rows: T[], year: number): T[] {
+  return [...rows].sort(
+    (a, b) =>
+      yearCount(b, year) - yearCount(a, year) ||
+      yearCount(b, year - 1) - yearCount(a, year - 1),
+  )
+}
+
+function DeltaCell({
+  current,
+  previous,
+}: {
+  current: number
+  previous: number
+}) {
+  const delta = current - previous
+  const percent =
+    previous === 0 ? (current === 0 ? 0 : null) : (delta / previous) * 100
+  return (
+    <TableCell
+      className={cn(
+        'w-24 text-right text-xs font-medium tabular-nums',
+        delta > 0 && 'text-destructive',
+        delta < 0 && 'text-emerald-600',
+        delta === 0 && 'text-muted-foreground',
+      )}
+    >
+      {percent === null
+        ? 'новое'
+        : `${percent > 0 ? '+' : ''}${percent.toFixed(1).replace('.', ',')}%`}
+    </TableCell>
+  )
+}
+
+export function ReferencesView({ mode }: { mode: AppealMode }) {
+  const { data, isPending } = useReferences(mode)
+  const rubrics = data?.rubrics ?? []
+  const themes = data?.themes ?? []
+  const sources = data?.sources ?? []
+  const departments = data?.departments ?? []
+  const currentYear = data?.comparison.currentYear ?? 0
+  const previousYear = data?.comparison.previousYear ?? currentYear - 1
+  const periodLabel = data
+    ? `Сопоставимый период ${previousYear} и ${currentYear} годов`
+    : ''
+  const comparisonHeaders = (
+    <>
+      <TableHead className="w-20 text-right">{previousYear}</TableHead>
+      <TableHead className="w-20 text-right">{currentYear}</TableHead>
+      <TableHead className="w-24 text-right">Динамика</TableHead>
+    </>
+  )
+  const comparisonCells = (item: RefItem) => {
+    const previous = yearCount(item, previousYear)
+    const current = yearCount(item, currentYear)
+    return (
+      <>
+        <CountCell value={previous} />
+        <CountCell value={current} strong />
+        <DeltaCell current={current} previous={previous} />
+      </>
+    )
+  }
 
   return (
     <div className="px-4 lg:px-6">
@@ -39,7 +150,10 @@ export function ReferencesView() {
         <CardHeader>
           <CardTitle>Справочники</CardTitle>
           <CardDescription>
-            Канонические рубрики, темы, источники и отделения из классификатора
+            {mode === 'chiefDoctor'
+              ? 'Рубрики, темы, каналы поступления и отделения для 07/19'
+              : 'Рубрики, темы, источники и отделения для 07-/01-'}
+            {periodLabel && ` · ${periodLabel}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -55,51 +169,53 @@ export function ReferencesView() {
                 <TabsTrigger value="rubrics">
                   Рубрики
                   <Badge variant="secondary" className="ml-1.5">
-                    {data.rubrics.length}
+                    {rubrics.length}
                   </Badge>
                 </TabsTrigger>
                 <TabsTrigger value="themes">
                   Темы
                   <Badge variant="secondary" className="ml-1.5">
-                    {data.themes.length}
+                    {themes.length}
                   </Badge>
                 </TabsTrigger>
                 <TabsTrigger value="sources">
-                  Источники
+                  {mode === 'chiefDoctor' ? 'Каналы' : 'Источники'}
                   <Badge variant="secondary" className="ml-1.5">
-                    {data.sources.length}
+                    {sources.length}
                   </Badge>
                 </TabsTrigger>
                 <TabsTrigger value="departments">
                   Отделения
                   <Badge variant="secondary" className="ml-1.5">
-                    {data.departments.length}
+                    {departments.length}
                   </Badge>
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="rubrics">
                 <div className="overflow-hidden rounded-lg border">
-                  <Table>
+                  <Table className="table-fixed">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Рубрика</TableHead>
                         <TableHead>Тема</TableHead>
-                        <TableHead className="w-[180px]">Код</TableHead>
-                        <TableHead className="w-20 text-right">Обращений</TableHead>
+                        <TableHead className="w-28">Код</TableHead>
+                        {comparisonHeaders}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {byCountDesc(data.rubrics).map((r) => (
+                      {byCurrentYear(rubrics, currentYear).map((r) => (
                         <TableRow key={r.id}>
-                          <TableCell className="font-medium">{r.name}</TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {r.theme ?? '—'}
-                          </TableCell>
-                          <TableCell className="font-mono text-xs text-muted-foreground">
-                            {r.code ?? '—'}
-                          </TableCell>
-                          <CountCell value={r.count} />
+                          <TextCell value={r.name} className="font-medium" />
+                          <TextCell
+                            value={r.theme}
+                            className="text-muted-foreground"
+                          />
+                          <TextCell
+                            value={r.code}
+                            className="font-mono text-xs text-muted-foreground"
+                          />
+                          {comparisonCells(r)}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -109,22 +225,23 @@ export function ReferencesView() {
 
               <TabsContent value="themes">
                 <div className="overflow-hidden rounded-lg border">
-                  <Table>
+                  <Table className="table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[280px]">Тема</TableHead>
+                        <TableHead className="w-2/5">Тема</TableHead>
                         <TableHead>Описание</TableHead>
-                        <TableHead className="w-20 text-right">Обращений</TableHead>
+                        {comparisonHeaders}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {byCountDesc(data.themes).map((t) => (
+                      {byCurrentYear(themes, currentYear).map((t) => (
                         <TableRow key={t.id}>
-                          <TableCell className="font-medium">{t.name}</TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {t.description ?? '—'}
-                          </TableCell>
-                          <CountCell value={t.count} />
+                          <TextCell value={t.name} className="font-medium" />
+                          <TextCell
+                            value={t.description}
+                            className="text-muted-foreground"
+                          />
+                          {comparisonCells(t)}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -134,22 +251,25 @@ export function ReferencesView() {
 
               <TabsContent value="sources">
                 <div className="overflow-hidden rounded-lg border">
-                  <Table>
+                  <Table className="table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Источник</TableHead>
-                        <TableHead className="w-[160px]">Статус</TableHead>
-                        <TableHead className="w-20 text-right">Обращений</TableHead>
+                        <TableHead>
+                          {mode === 'chiefDoctor' ? 'Канал' : 'Источник'}
+                        </TableHead>
+                        <TableHead className="w-32">Статус</TableHead>
+                        {comparisonHeaders}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {byCountDesc(data.sources).map((s) => (
+                      {byCurrentYear(sources, currentYear).map((s) => (
                         <TableRow key={s.id}>
-                          <TableCell className="font-medium">{s.name}</TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {s.status ?? '—'}
-                          </TableCell>
-                          <CountCell value={s.count} />
+                          <TextCell value={s.name} className="font-medium" />
+                          <TextCell
+                            value={s.status}
+                            className="text-muted-foreground"
+                          />
+                          {comparisonCells(s)}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -159,18 +279,18 @@ export function ReferencesView() {
 
               <TabsContent value="departments">
                 <div className="overflow-hidden rounded-lg border">
-                  <Table>
+                  <Table className="table-fixed">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Отделение</TableHead>
-                        <TableHead className="w-20 text-right">Обращений</TableHead>
+                        {comparisonHeaders}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {byCountDesc(data.departments).map((d) => (
+                      {byCurrentYear(departments, currentYear).map((d) => (
                         <TableRow key={d.id}>
-                          <TableCell className="font-medium">{d.name}</TableCell>
-                          <CountCell value={d.count} />
+                          <TextCell value={d.name} className="font-medium" />
+                          {comparisonCells(d)}
                         </TableRow>
                       ))}
                     </TableBody>
