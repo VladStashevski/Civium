@@ -4,7 +4,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from '@/components/ui/card'
 import {
   Popover,
@@ -148,7 +147,6 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
     <div className="px-4 lg:px-6">
       <Card>
         <CardHeader>
-          <CardTitle>Справочники</CardTitle>
           <CardDescription>
             {mode === 'chiefDoctor'
               ? 'Рубрики, темы, каналы поступления и отделения для 07/19'

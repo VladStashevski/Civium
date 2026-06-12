@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { DotsThreeVerticalIcon } from '@phosphor-icons/react'
+import { PencilSimpleIcon } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -12,13 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -62,44 +55,21 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 text-muted-foreground"
-          >
-            <DotsThreeVerticalIcon />
-            <span className="sr-only">Действия</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44">
-          <DropdownMenuItem onSelect={openEditor}>
-            Редактировать…
-          </DropdownMenuItem>
-          {hasAnnotation && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onSelect={() =>
-                  mutate(
-                    { uid: appeal.uid, isJustified: null, notes: '' },
-                    { onError: () => toast.error('Не удалось очистить аннотацию') },
-                  )
-                }
-              >
-                Очистить аннотацию
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8 text-muted-foreground"
+        onClick={openEditor}
+        aria-label={`Редактировать обращение № ${appeal.id}`}
+        title="Редактировать"
+      >
+        <PencilSimpleIcon />
+      </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="gap-4 overflow-hidden">
           <DialogHeader>
-            <DialogTitle>Аннотация обращения</DialogTitle>
+            <DialogTitle>Редактирование обращения</DialogTitle>
             <DialogDescription className="truncate">
               № {appeal.id} · {appeal.correspondent}
             </DialogDescription>
@@ -156,6 +126,25 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
           </div>
 
           <DialogFooter>
+            {hasAnnotation && (
+              <Button
+                variant="ghost"
+                className="mr-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
+                disabled={isPending}
+                onClick={() =>
+                  mutate(
+                    { uid: appeal.uid, isJustified: null, notes: '' },
+                    {
+                      onSuccess: () => setOpen(false),
+                      onError: () =>
+                        toast.error('Не удалось очистить аннотацию'),
+                    },
+                  )
+                }
+              >
+                Очистить
+              </Button>
+            )}
             <DialogClose asChild>
               <Button variant="ghost">Отмена</Button>
             </DialogClose>
