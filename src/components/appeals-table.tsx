@@ -136,21 +136,10 @@ function TruncatedCell({ text, className }: { text?: string; className?: string 
         >
           <span
             ref={textRef}
-            className={cn(
-              'block w-full overflow-hidden whitespace-nowrap',
-              isTruncated && 'pr-3',
-            )}
+            className="block w-full overflow-hidden text-ellipsis whitespace-nowrap"
           >
             {text}
           </span>
-          {isTruncated && (
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute top-0 right-0"
-            >
-              …
-            </span>
-          )}
         </button>
       </PopoverTrigger>
       <PopoverContent
