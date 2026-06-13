@@ -143,7 +143,25 @@
   [data-slot="sidebar-menu-sub-button"],
   [data-slot="table"] tbody tr {
     transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
-    }
+  }
+}
+
+@keyframes appeals-column-enter {
+  from {
+    width: 0;
+    padding-inline: 0;
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    width: var(--appeals-column-width);
+    opacity: 1;
+    clip-path: inset(0);
+  }
+}
+
+.appeals-column-enter {
+  animation: appeals-column-enter 300ms ease-out both;
 }
 
 /* Глобальный скейлинг интерфейса под крупные экраны.

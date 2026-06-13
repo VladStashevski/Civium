@@ -1,3 +1,5 @@
+import * as React from 'react'
+
 import { Badge } from '@/components/ui/badge'
 import {
   Card,
@@ -32,6 +34,21 @@ function TextCell({
   className?: string
 }) {
   const text = value || '—'
+  const textRef = React.useRef<HTMLSpanElement>(null)
+  const [isTruncated, setIsTruncated] = React.useState(false)
+
+  React.useEffect(() => {
+    const element = textRef.current
+    if (!element) return
+
+    const update = () =>
+      setIsTruncated(element.scrollWidth > element.clientWidth + 1)
+    update()
+
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [text])
 
   return (
     <TableCell className={cn('min-w-0 overflow-hidden', className)}>
@@ -40,10 +57,20 @@ function TextCell({
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="block w-full min-w-0 max-w-full cursor-pointer overflow-hidden text-left underline-offset-2 decoration-dotted hover:underline"
-              aria-label={`Показать полностью: ${text}`}
+              disabled={!isTruncated}
+              className={cn(
+                'block w-full min-w-0 max-w-full overflow-hidden text-left',
+                isTruncated &&
+                  'cursor-pointer underline-offset-2 decoration-dotted hover:underline aria-expanded:underline',
+              )}
+              aria-label={
+                isTruncated ? `Показать полностью: ${text}` : undefined
+              }
             >
-              <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap">
+              <span
+                ref={textRef}
+                className="block w-full overflow-hidden text-ellipsis whitespace-nowrap"
+              >
                 {text}
               </span>
             </button>
@@ -195,8 +222,8 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                   <Table className="table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Рубрика</TableHead>
-                        <TableHead>Тема</TableHead>
+                        <TableHead className="w-2/5">Рубрика</TableHead>
+                        <TableHead className="text-center">Тема</TableHead>
                         <TableHead className="w-28">Код</TableHead>
                         {comparisonHeaders}
                       </TableRow>
@@ -207,7 +234,7 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                           <TextCell value={r.name} className="font-medium" />
                           <TextCell
                             value={r.theme}
-                            className="text-muted-foreground"
+                            className="text-center text-muted-foreground"
                           />
                           <TextCell
                             value={r.code}
@@ -226,7 +253,9 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                   <Table className="table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-2/5">Тема</TableHead>
+                        <TableHead className="w-[30%] text-center">
+                          Тема
+                        </TableHead>
                         <TableHead>Описание</TableHead>
                         {comparisonHeaders}
                       </TableRow>
@@ -234,7 +263,10 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                     <TableBody>
                       {byCurrentYear(themes, currentYear).map((t) => (
                         <TableRow key={t.id}>
-                          <TextCell value={t.name} className="font-medium" />
+                          <TextCell
+                            value={t.name}
+                            className="text-center font-medium"
+                          />
                           <TextCell
                             value={t.description}
                             className="text-muted-foreground"
@@ -252,10 +284,10 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                   <Table className="table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>
+                        <TableHead className="w-1/3">
                           {mode === 'chiefDoctor' ? 'Канал' : 'Источник'}
                         </TableHead>
-                        <TableHead className="w-32">Статус</TableHead>
+                        <TableHead>Статус</TableHead>
                         {comparisonHeaders}
                       </TableRow>
                     </TableHeader>

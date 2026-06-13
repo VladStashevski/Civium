@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import * as React from 'react'
+import { SpinnerIcon } from '@phosphor-icons/react'
 import {
   Outlet,
   createRootRoute,
@@ -24,8 +25,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (isPending) {
     return (
-      <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
-        Загрузка…
+      <div
+        className="flex min-h-svh items-center justify-center text-muted-foreground"
+        role="status"
+        aria-label="Загрузка"
+      >
+        <SpinnerIcon className="size-5 animate-spin" />
       </div>
     )
   }

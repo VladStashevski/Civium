@@ -88,6 +88,8 @@ const COLUMN_LABELS: Record<string, string> = {
   notes: 'Комментарий',
 }
 
+const CENTERED_COLUMN_IDS = new Set(['dateIso', 'sourceView'])
+
 function getDepartments(a: Appeal): string[] {
   const manual = a.manualFields?.departments
   return manual && manual.length ? manual : (a.departments ?? [])
@@ -102,20 +104,53 @@ const inArray: FilterFn<Appeal> = (row, columnId, value) => {
 
 /** Truncated text that opens the full value in a popover on click. */
 function TruncatedCell({ text, className }: { text?: string; className?: string }) {
+  const textRef = React.useRef<HTMLSpanElement>(null)
+  const [isTruncated, setIsTruncated] = React.useState(false)
+
+  React.useEffect(() => {
+    const element = textRef.current
+    if (!element) return
+
+    const update = () =>
+      setIsTruncated(element.scrollWidth > element.clientWidth + 1)
+    update()
+
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [text])
+
   if (!text) return <span className="text-muted-foreground/60">—</span>
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
+          disabled={!isTruncated}
           className={cn(
-            'block w-full min-w-0 max-w-full cursor-pointer overflow-hidden text-left underline-offset-2 decoration-dotted hover:underline',
+            'relative block w-full min-w-0 max-w-full overflow-hidden text-left',
+            isTruncated &&
+              'cursor-pointer underline-offset-2 decoration-dotted hover:underline aria-expanded:underline',
             className,
           )}
         >
-          <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap">
+          <span
+            ref={textRef}
+            className={cn(
+              'block w-full overflow-hidden whitespace-nowrap',
+              isTruncated && 'pr-3',
+            )}
+          >
             {text}
           </span>
+          {isTruncated && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute top-0 right-0"
+            >
+              …
+            </span>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -152,7 +187,7 @@ const columns: ColumnDef<Appeal>[] = [
   {
     accessorKey: 'id',
     size: 80,
-    minSize: 64,
+    minSize: 110,
     maxSize: 140,
     header: ({ column }) => <SortHeader column={column}>№</SortHeader>,
     cell: ({ row }) => (
@@ -164,11 +199,11 @@ const columns: ColumnDef<Appeal>[] = [
   {
     accessorKey: 'dateIso',
     size: 110,
-    minSize: 96,
+    minSize: 140,
     maxSize: 150,
     header: ({ column }) => <SortHeader column={column}>Дата</SortHeader>,
     cell: ({ row }) => (
-      <span className="tabular-nums whitespace-nowrap text-muted-foreground">
+      <span className="block text-center tabular-nums whitespace-nowrap text-muted-foreground">
         {formatDateShort(row.original.dateIso)}
       </span>
     ),
@@ -176,7 +211,7 @@ const columns: ColumnDef<Appeal>[] = [
   {
     accessorKey: 'content',
     size: 280,
-    minSize: 140,
+    minSize: 180,
     maxSize: 600,
     header: 'Содержание',
     cell: ({ row }) => <TruncatedCell text={row.original.content} />,
@@ -184,7 +219,7 @@ const columns: ColumnDef<Appeal>[] = [
   {
     accessorKey: 'correspondent',
     size: 170,
-    minSize: 120,
+    minSize: 190,
     maxSize: 420,
     header: 'Корреспондент',
     cell: ({ row }) => (
@@ -194,7 +229,7 @@ const columns: ColumnDef<Appeal>[] = [
   {
     accessorKey: 'profile',
     size: 190,
-    minSize: 120,
+    minSize: 130,
     maxSize: 480,
     header: 'Рубрика',
     filterFn: inArray,
@@ -207,8 +242,8 @@ const columns: ColumnDef<Appeal>[] = [
   },
   {
     id: 'sourceView',
-    size: 180,
-    minSize: 120,
+    size: 190,
+    minSize: 200,
     maxSize: 420,
     accessorFn: (appeal) =>
       appeal.appealMode === 'chiefDoctor'
@@ -219,14 +254,14 @@ const columns: ColumnDef<Appeal>[] = [
     cell: ({ getValue }) => (
       <TruncatedCell
         text={getValue<string>()}
-        className="text-muted-foreground"
+        className="text-center text-muted-foreground"
       />
     ),
   },
   {
     accessorKey: 'registrationRoute',
-    size: 170,
-    minSize: 120,
+    size: 210,
+    minSize: 220,
     maxSize: 380,
     header: 'Контур регистрации',
     filterFn: inArray,
@@ -240,7 +275,7 @@ const columns: ColumnDef<Appeal>[] = [
   {
     accessorKey: 'location',
     size: 130,
-    minSize: 90,
+    minSize: 110,
     maxSize: 240,
     header: 'Город',
     cell: ({ row }) => (
@@ -252,7 +287,7 @@ const columns: ColumnDef<Appeal>[] = [
   {
     accessorKey: 'documentTopic',
     size: 190,
-    minSize: 120,
+    minSize: 110,
     maxSize: 480,
     header: 'Тема',
     cell: ({ row }) => (
@@ -265,7 +300,7 @@ const columns: ColumnDef<Appeal>[] = [
   {
     accessorKey: 'officialCategory',
     size: 180,
-    minSize: 120,
+    minSize: 150,
     maxSize: 420,
     header: 'Категория',
     filterFn: inArray,
@@ -279,7 +314,7 @@ const columns: ColumnDef<Appeal>[] = [
   {
     id: 'departments',
     size: 190,
-    minSize: 120,
+    minSize: 170,
     maxSize: 480,
     accessorFn: (a) => getDepartments(a).join(', '),
     header: ({ column }) => <SortHeader column={column}>Отделения</SortHeader>,
@@ -289,8 +324,8 @@ const columns: ColumnDef<Appeal>[] = [
   },
   {
     id: 'justified',
-    size: 160,
-    minSize: 140,
+    size: 210,
+    minSize: 220,
     maxSize: 220,
     accessorFn: (a) =>
       a.manualFields?.isJustified === true
@@ -320,7 +355,7 @@ const columns: ColumnDef<Appeal>[] = [
   {
     id: 'notes',
     size: 190,
-    minSize: 120,
+    minSize: 170,
     maxSize: 480,
     accessorFn: (a) => a.manualFields?.notes ?? '',
     header: 'Комментарий',
@@ -351,6 +386,23 @@ const DEFAULT_HIDDEN: VisibilityState = {
   officialCategory: false,
 }
 
+const COLUMN_MIN_WIDTHS: Record<string, number> = {
+  id: 110,
+  dateIso: 140,
+  content: 180,
+  correspondent: 190,
+  profile: 130,
+  sourceView: 200,
+  registrationRoute: 220,
+  location: 110,
+  documentTopic: 110,
+  officialCategory: 150,
+  departments: 170,
+  justified: 220,
+  notes: 170,
+  actions: 52,
+}
+
 const JUSTIFIED_OPTIONS: FacetOption[] = [
   { label: 'Обоснованно', value: 'Обоснованно' },
   { label: 'Не обоснованно', value: 'Не обоснованно' },
@@ -374,6 +426,10 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
   const [globalFilter, setGlobalFilter] = React.useState('')
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({})
+  const [enteringColumnId, setEnteringColumnId] = React.useState<string | null>(
+    null,
+  )
+  const enteringColumnTimer = React.useRef<number | undefined>(undefined)
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(
     () => ({
       ...DEFAULT_HIDDEN,
@@ -420,7 +476,17 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
     onGlobalFilterChange: setGlobalFilter,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
-    onColumnSizingChange: setColumnSizing,
+    onColumnSizingChange: (updater) =>
+      setColumnSizing((current) => {
+        const next =
+          typeof updater === 'function' ? updater(current) : updater
+        return Object.fromEntries(
+          Object.entries(next).map(([columnId, width]) => [
+            columnId,
+            Math.max(width, COLUMN_MIN_WIDTHS[columnId] ?? 120),
+          ]),
+        )
+      }),
     columnResizeMode: 'onChange',
     enableColumnResizing: true,
     getCoreRowModel: getCoreRowModel(),
@@ -435,6 +501,7 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
   const { pageIndex, pageSize } = table.getState().pagination
   const total = table.getFilteredRowModel().rows.length
   const isFiltered = columnFilters.length > 0
+  const isResizingColumn = table.getState().columnSizingInfo.isResizingColumn
 
   React.useEffect(() => {
     setColumnFilters([])
@@ -445,6 +512,23 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
     }))
     table.setPageIndex(0)
   }, [mode, table])
+
+  React.useEffect(
+    () => () => window.clearTimeout(enteringColumnTimer.current),
+    [],
+  )
+
+  const setColumnVisible = (column: Column<Appeal>, visible: boolean) => {
+    if (visible && !column.getIsVisible()) {
+      window.clearTimeout(enteringColumnTimer.current)
+      setEnteringColumnId(column.id)
+      enteringColumnTimer.current = window.setTimeout(
+        () => setEnteringColumnId(null),
+        300,
+      )
+    }
+    column.toggleVisibility(visible)
+  }
 
   return (
     <div className="px-4 lg:px-6">
@@ -522,7 +606,7 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
                       <DropdownMenuCheckboxItem
                         key={column.id}
                         checked={column.getIsVisible()}
-                        onCheckedChange={(v) => column.toggleVisibility(!!v)}
+                        onCheckedChange={(v) => setColumnVisible(column, !!v)}
                         onSelect={(event) => event.preventDefault()}
                       >
                         {COLUMN_LABELS[column.id] ?? column.id}
@@ -535,7 +619,10 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
 
           <div className="overflow-hidden rounded-lg border">
             <Table
-              className="table-fixed"
+              className={cn(
+                'table-fixed transition-[width] duration-300 ease-out',
+                isResizingColumn && 'transition-none',
+              )}
               style={{
                 width: table.getTotalSize(),
                 minWidth: '100%',
@@ -547,10 +634,31 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
                     {hg.headers.map((header) => (
                       <TableHead
                         key={header.id}
-                        className="relative overflow-hidden"
-                        style={{ width: header.getSize() }}
+                        className={cn(
+                          'relative overflow-hidden transition-[width] duration-300 ease-out',
+                          CENTERED_COLUMN_IDS.has(header.column.id) &&
+                            'text-center',
+                          header.column.id === enteringColumnId &&
+                            'appeals-column-enter',
+                          isResizingColumn && 'transition-none',
+                        )}
+                        style={
+                          {
+                            width: header.getSize(),
+                            minWidth:
+                              COLUMN_MIN_WIDTHS[header.column.id] ??
+                              header.column.columnDef.minSize,
+                            '--appeals-column-width': `${header.getSize()}px`,
+                          } as React.CSSProperties
+                        }
                       >
-                        <div className="min-w-0 overflow-hidden whitespace-nowrap">
+                        <div
+                          className={cn(
+                            'min-w-0 overflow-hidden whitespace-nowrap',
+                            CENTERED_COLUMN_IDS.has(header.column.id) &&
+                              'text-center',
+                          )}
+                        >
                           {header.isPlaceholder
                             ? null
                             : flexRender(
@@ -595,8 +703,23 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
                       {row.getVisibleCells().map((cell) => (
                         <TableCell
                           key={cell.id}
-                          className="min-w-0 overflow-hidden"
-                          style={{ width: cell.column.getSize() }}
+                          className={cn(
+                            'min-w-0 overflow-hidden transition-[width] duration-300 ease-out',
+                            CENTERED_COLUMN_IDS.has(cell.column.id) &&
+                              'text-center',
+                            cell.column.id === enteringColumnId &&
+                              'appeals-column-enter',
+                            isResizingColumn && 'transition-none',
+                          )}
+                          style={
+                            {
+                              width: cell.column.getSize(),
+                              minWidth:
+                                COLUMN_MIN_WIDTHS[cell.column.id] ??
+                                cell.column.columnDef.minSize,
+                              '--appeals-column-width': `${cell.column.getSize()}px`,
+                            } as React.CSSProperties
+                          }
                         >
                           {flexRender(
                             cell.column.columnDef.cell,
