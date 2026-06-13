@@ -62,6 +62,7 @@ function TextCell({
                 'block w-full min-w-0 max-w-full overflow-hidden text-left',
                 isTruncated &&
                   'cursor-pointer underline-offset-2 decoration-dotted hover:underline aria-expanded:underline',
+                className,
               )}
               aria-label={
                 isTruncated ? `Показать полностью: ${text}` : undefined
