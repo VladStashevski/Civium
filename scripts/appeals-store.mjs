@@ -19,9 +19,9 @@ const APPEAL_MODES = {
 }
 
 const REGISTRATION_ROUTES = {
-  chiefDoctor: 'На имя главного врача (07/19)',
-  department: 'Депздрав Югры (07-*)',
-  governor: 'Губернатор Югры (01-*)',
+  chiefDoctor: '07/19 — главный врач',
+  department: '07-* — Депздрав Югры',
+  governor: '01-* — Губернатор Югры',
   other: 'Другой контур регистрации',
 }
 

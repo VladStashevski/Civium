@@ -104,8 +104,10 @@ export function buildDashboardData(records, metadata = {}) {
       return dateCompare || clean(a.id).localeCompare(clean(b.id))
     })
   const comparable = selectComparablePeriod(allRecords)
-  const normalizedRecords = comparable.current
-  const previousRecords = comparable.previous
+  const currentGratitudeCount = comparable.current.filter(isGratitudeRecord).length
+  const previousGratitudeCount = comparable.previous.filter(isGratitudeRecord).length
+  const normalizedRecords = comparable.current.filter((record) => !isGratitudeRecord(record))
+  const previousRecords = comparable.previous.filter((record) => !isGratitudeRecord(record))
 
   const total = normalizedRecords.length
   const chiefDoctorRecords = normalizedRecords.filter(
@@ -123,8 +125,12 @@ export function buildDashboardData(records, metadata = {}) {
     (record) => record.manualFields?.isJustified === false
   ).length
   const justificationMissingCount = total - justifiedCount - unjustifiedCount
-  const previousSummary = buildSummary(previousRecords)
-  const currentSummary = buildSummary(normalizedRecords)
+  const previousSummary = buildSummary(previousRecords, {
+    gratitudeCount: previousGratitudeCount,
+  })
+  const currentSummary = buildSummary(normalizedRecords, {
+    gratitudeCount: currentGratitudeCount,
+  })
 
   return {
     generatedAt: new Date().toISOString(),
@@ -166,6 +172,7 @@ export function buildDashboardData(records, metadata = {}) {
       locationCount: countUnique(normalizedRecords.map((record) => record.location)),
       rubricMissingCount: normalizedRecords.filter((record) => !record.rawRubric)
         .length,
+      gratitudeCount: currentGratitudeCount,
     },
     byMonth: buildComparableMonths(
       normalizedRecords,
@@ -242,7 +249,7 @@ export function selectComparablePeriod(records) {
   }
 }
 
-function buildSummary(records) {
+function buildSummary(records, extra = {}) {
   const chiefDoctorRecords = records.filter(
     (record) => getAppealMode(record) === 'chiefDoctor'
   )
@@ -266,7 +273,25 @@ function buildSummary(records) {
     unjustifiedCount: records.filter(
       (record) => record.manualFields?.isJustified === false
     ).length,
+    gratitudeCount: extra.gratitudeCount ?? records.filter(isGratitudeRecord).length,
   }
+}
+
+export function isGratitudeRecord(record = {}) {
+  return /благодар|спасибо|признательн|поощр/i.test(
+    [
+      record.profile,
+      record.rubricCanonicalName,
+      record.rubricName,
+      record.rawRubric,
+      record.documentTopic,
+      record.officialCategory,
+      record.intent,
+      record.content,
+    ]
+      .map(clean)
+      .join(' ')
+  )
 }
 
 function buildComparableCounts(current, previous, getKey) {
@@ -556,19 +581,19 @@ function resolveRegistration(id) {
   if (/^07\/19/i.test(text)) {
     return {
       appealMode: 'chiefDoctor',
-      registrationRoute: 'На имя главного врача (07/19)',
+      registrationRoute: '07/19 — главный врач',
     }
   }
   if (/^07-(ОГ|ЗИ|НО)/i.test(text)) {
     return {
       appealMode: 'external',
-      registrationRoute: 'Депздрав Югры (07-*)',
+      registrationRoute: '07-* — Депздрав Югры',
     }
   }
   if (/^01-/i.test(text)) {
     return {
       appealMode: 'external',
-      registrationRoute: 'Губернатор Югры (01-*)',
+      registrationRoute: '01-* — Губернатор Югры',
     }
   }
   return {

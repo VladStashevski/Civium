@@ -177,8 +177,8 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
         <CardHeader>
           <CardDescription>
             {mode === 'chiefDoctor'
-              ? 'Рубрики, темы, каналы поступления и отделения для 07/19'
-              : 'Рубрики, темы, источники и отделения для 07-/01-'}
+              ? 'Рубрики, тематика, источники поступления и отделения для контура 07/19'
+              : 'Рубрики, тематика, источники и отделения для контуров 01-* и 07-*'}
             {periodLabel && ` · ${periodLabel}`}
           </CardDescription>
         </CardHeader>
@@ -191,7 +191,8 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
             </div>
           ) : (
             <Tabs defaultValue="rubrics" className="gap-4">
-              <TabsList>
+              <div className="-mx-1 overflow-x-auto px-1">
+                <TabsList>
                 <TabsTrigger value="rubrics">
                   Рубрики
                   <Badge variant="secondary" className="ml-1.5">
@@ -199,13 +200,13 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                   </Badge>
                 </TabsTrigger>
                 <TabsTrigger value="themes">
-                  Темы
+                  Тематика
                   <Badge variant="secondary" className="ml-1.5">
                     {themes.length}
                   </Badge>
                 </TabsTrigger>
                 <TabsTrigger value="sources">
-                  {mode === 'chiefDoctor' ? 'Каналы' : 'Источники'}
+                  Источники
                   <Badge variant="secondary" className="ml-1.5">
                     {sources.length}
                   </Badge>
@@ -216,7 +217,8 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                     {departments.length}
                   </Badge>
                 </TabsTrigger>
-              </TabsList>
+                </TabsList>
+              </div>
 
               <TabsContent value="rubrics">
                 <div className="overflow-hidden rounded-lg border">
@@ -224,7 +226,7 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-2/5">Рубрика</TableHead>
-                        <TableHead className="text-center">Тема</TableHead>
+                        <TableHead className="text-center">Тематика</TableHead>
                         <TableHead className="w-28">Код</TableHead>
                         {comparisonHeaders}
                       </TableRow>
@@ -255,7 +257,7 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[30%] text-center">
-                          Тема
+                          Тематика
                         </TableHead>
                         <TableHead>Описание</TableHead>
                         {comparisonHeaders}
@@ -286,7 +288,7 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-1/3">
-                          {mode === 'chiefDoctor' ? 'Канал' : 'Источник'}
+                          Источник
                         </TableHead>
                         <TableHead>Статус</TableHead>
                         {comparisonHeaders}

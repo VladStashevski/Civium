@@ -12,6 +12,6 @@ export function parseAppealModeSearch(
 
 export function appealModeLabel(mode: AppealMode): string {
   return mode === 'chiefDoctor'
-    ? 'На имя главного врача (07/19)'
-    : 'Внешние обращения (07-/01-)'
+    ? '07/19 — главный врач'
+    : 'Депздрав Югры (07-*) и Губернатор Югры (01-*)'
 }

@@ -8,7 +8,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { useAppeals } from '@/hooks/use-appeals'
+import { isGratitudeAppeal } from '@/lib/appeals-data'
 import type { Appeal, AppealMode } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -18,7 +20,7 @@ const MONTHS_SHORT = [
 ]
 const yearOf = (a: Appeal) => a.dateIso?.slice(0, 4) ?? ''
 const monthOf = (a: Appeal) => a.dateIso?.slice(5, 7) ?? ''
-const isGratitude = (a: Appeal) => /благодарн/i.test(a.profile ?? '')
+const isGratitude = (a: Appeal) => isGratitudeAppeal(a)
 const isDiscontinued = (a: Appeal) => /прекращ/i.test(a.profile ?? '')
 const effDepartments = (a: Appeal): string[] => {
   const m = a.manualFields?.departments
@@ -163,7 +165,7 @@ function TotalRail({
         </div>
       </div>
       <div className="flex items-center justify-center gap-3">
-        <span className="text-2xl text-destructive">→</span>
+        <span className="inline-block rotate-90 text-2xl text-destructive md:rotate-0">→</span>
         <span className={cn('text-2xl font-extrabold tabular-nums md:text-3xl', deltaClass(aDelta))}>
           {signed(aDelta)}
         </span>
@@ -370,6 +372,7 @@ function ProfileCard({
 
 export function SlidesView({ mode }: { mode: AppealMode }) {
   const { data, isPending } = useAppeals(mode)
+  const isMobile = useIsMobile()
   const items = React.useMemo(() => data?.items ?? [], [data])
 
   const yearOptions = React.useMemo(() => {
@@ -440,10 +443,10 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
 
   const sources = rankRows(prevAll, curAll, (appeal) => [
     mode === 'chiefDoctor'
-      ? appeal.sourceChannel || 'Канал не определён'
+      ? appeal.sourceChannel || 'Источник не определён'
       : appeal.sourceOrganization || 'Источник не определён',
   ])
-  const topics = rankRows(aPrevItems, aCurItems, (a) => [a.rubricTheme || 'Без темы'])
+  const topics = rankRows(aPrevItems, aCurItems, (a) => [a.rubricTheme || 'Без тематики'])
   const profiles = rankRows(deepPrev, deepCur, (a) => [a.profile || '—']).slice(0, 4)
   const profileMax = Math.max(...profiles.flatMap((p) => [p.prev, p.cur]), 1)
 
@@ -536,14 +539,14 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
           </Button>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-sm text-muted-foreground">Темы для углублённого анализа:</span>
+          <span className="mr-1 text-sm text-muted-foreground">Тематика для углублённого анализа:</span>
           <Button
             size="sm"
             variant={themes.length === 0 ? 'secondary' : 'outline'}
             className="h-7 rounded-full"
             onClick={() => setThemes([])}
           >
-            Все темы
+            Вся тематика
           </Button>
           {themeOptions.map((t) => {
             const active = themes.includes(t)
@@ -586,7 +589,7 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
                 <Legend prevYear={prevYear} curYear={curYear} />
               </div>
               <div className="h-[280px]">
-                <GroupedBars monthly={months} />
+                <GroupedBars monthly={months} compact={isMobile} />
               </div>
             </div>
             <div className="flex flex-col">
@@ -599,22 +602,22 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
         </Slide>
 
         {/* СЛАЙД 2 */}
-        <Slide n={2} title={`Источники и темы: ${periodLabel}`}>
+        <Slide n={2} title={`Источники и тематика: ${periodLabel}`}>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-10">
             <div className="flex flex-col">
               <span className="mb-2 text-sm font-bold">
-                {mode === 'chiefDoctor' ? 'Каналы поступления' : 'Источники поступления'}
+                Источники поступления
               </span>
               <RankTable
                 rows={sources}
                 prevYear={prevYear}
                 curYear={curYear}
-                nameHeader={mode === 'chiefDoctor' ? 'Канал 07/19' : 'Источник 07-/01-'}
+                nameHeader={mode === 'chiefDoctor' ? 'Источник 07/19' : 'Источник 01-* / 07-*'}
               />
             </div>
             <div className="flex flex-col">
-              <span className="mb-2 text-sm font-bold">Темы обращений</span>
-              <RankTable rows={topics} prevYear={prevYear} curYear={curYear} nameHeader="Тема" />
+              <span className="mb-2 text-sm font-bold">Тематика обращений</span>
+              <RankTable rows={topics} prevYear={prevYear} curYear={curYear} nameHeader="Тематика" />
             </div>
           </div>
         </Slide>
@@ -644,7 +647,7 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
                 <Legend prevYear={prevYear} curYear={curYear} />
               </div>
               <div className="min-h-0 flex-1">
-                <GroupedBars monthly={deepMonthly} />
+                <GroupedBars monthly={deepMonthly} compact={isMobile} />
               </div>
             </div>
             <div className="flex h-[170px] flex-col justify-center rounded-lg border bg-muted/30 p-4">
@@ -697,6 +700,8 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
                   >
                     {section.palette.label}
                   </div>
+                  <div className="overflow-x-auto print:overflow-visible">
+                  <div className="flex min-w-[30rem] flex-col gap-1.5 print:min-w-0">
                   <div className="grid grid-cols-[minmax(0,1fr)_2rem_2rem_3rem_repeat(4,2.2rem)_2.6rem] items-center gap-1 px-1 text-[9px] font-bold text-muted-foreground uppercase">
                     <span>Отделение</span>
                     <span className="text-center">{prevYear}</span>
@@ -733,6 +738,8 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
                       </div>
                     )
                   })}
+                  </div>
+                  </div>
                 </div>
               ))}
             </div>

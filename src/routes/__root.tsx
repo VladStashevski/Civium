@@ -77,7 +77,9 @@ function RootLayout() {
         </AuthGate>
       )}
       <Toaster />
-      <TanStackRouterDevtools position="bottom-right" />
+      {import.meta.env.DEV && (
+        <TanStackRouterDevtools position="bottom-right" />
+      )}
     </TooltipProvider>
   )
 }

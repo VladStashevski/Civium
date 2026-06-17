@@ -32,29 +32,40 @@ export function FacetedFilter<T>({
           variant="outline"
           size="sm"
           className={cn(
-            'border-dashed',
+            'border-dashed transition-[background-color,border-color,color,box-shadow] duration-300 ease-out',
             selected.size > 0 &&
               'border-solid border-primary/40 bg-primary/5 text-foreground',
           )}
         >
           <PlusCircleIcon
-            className={cn(selected.size > 0 && 'text-primary')}
+            className={cn('size-4 shrink-0', selected.size > 0 && 'text-primary')}
+            weight="regular"
           />
           {title}
-          {selected.size > 0 && (
-            <>
+          <span
+            className={cn(
+              'grid min-w-0 grid-cols-[0fr] overflow-hidden transition-[grid-template-columns,opacity] duration-300 ease-out',
+              selected.size > 0 ? 'grid-cols-[1fr] opacity-100' : 'opacity-0',
+            )}
+          >
+            <span className="flex min-w-0 items-center overflow-hidden">
               <Separator
                 orientation="vertical"
-                className="mx-1 data-[orientation=vertical]:h-4"
+                className="mx-1 self-center data-[orientation=vertical]:h-4"
               />
               <Badge
                 variant="secondary"
-                className="rounded-sm bg-primary/15 px-1 font-medium text-primary"
+                className="h-6 min-w-6 justify-center rounded-full bg-primary/15 px-1.5 font-medium text-primary"
               >
-                {selected.size}
+                <span
+                  key={selected.size}
+                  className="appeals-badge-pop tabular-nums"
+                >
+                  {selected.size || ''}
+                </span>
               </Badge>
-            </>
-          )}
+            </span>
+          </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -81,13 +92,19 @@ export function FacetedFilter<T>({
               >
                 <span
                   className={cn(
-                    'mt-px flex size-4 shrink-0 items-center justify-center rounded-[6px] border transition-colors',
+                    'mt-px flex size-4 shrink-0 items-center justify-center rounded-[6px] border transition-[background-color,border-color,color] duration-200',
                     isSelected
                       ? 'border-primary bg-primary text-primary-foreground'
                       : 'border-input',
                   )}
                 >
-                  {isSelected && <CheckIcon className="size-3" weight="bold" />}
+                  <CheckIcon
+                    className={cn(
+                      'size-3 transition-opacity duration-160',
+                      isSelected ? 'opacity-100' : 'opacity-0',
+                    )}
+                    weight="bold"
+                  />
                 </span>
                 <span className="line-clamp-2 min-w-0 flex-1 leading-snug">
                   {option.label || '— не задано'}
@@ -108,17 +125,27 @@ export function FacetedFilter<T>({
             )
           })}
         </div>
-        {selected.size > 0 && (
-          <div className="border-t p-2.5">
-            <button
-              type="button"
-              className="w-full rounded-xl px-3 py-2 text-center text-sm font-medium text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent"
-              onClick={() => column?.setFilterValue(undefined)}
-            >
-              Сбросить
-            </button>
+        <div
+          className={cn(
+            'grid transition-[grid-template-rows,opacity] duration-200 ease-out',
+            selected.size > 0
+              ? 'grid-rows-[1fr] opacity-100'
+              : 'pointer-events-none grid-rows-[0fr] opacity-0',
+          )}
+        >
+          <div className="overflow-hidden">
+            <div className="border-t p-1.5">
+              <button
+                type="button"
+                tabIndex={selected.size > 0 ? 0 : -1}
+                className="w-full rounded-xl px-3 py-1.5 text-center text-sm font-medium text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent"
+                onClick={() => column?.setFilterValue(undefined)}
+              >
+                Сбросить
+              </button>
+            </div>
           </div>
-        )}
+        </div>
       </PopoverContent>
     </Popover>
   )

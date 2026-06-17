@@ -55,7 +55,7 @@ function DistributionCard({
                     className={cn(
                       'shrink-0 rounded-md px-1.5 py-0.5 text-xs font-medium tabular-nums',
                       r.delta > 0 && 'bg-destructive/10 text-destructive',
-                      r.delta < 0 && 'bg-emerald-500/10 text-emerald-600',
+                      r.delta < 0 && 'bg-positive/10 text-positive',
                       r.delta === 0 && 'bg-muted text-muted-foreground',
                     )}
                   >
@@ -135,21 +135,21 @@ export function DashboardBreakdowns({ mode }: { mode: AppealMode }) {
       />
       {mode === 'chiefDoctor' ? (
         <DistributionCard
-          title="Каналы 07/19"
-          description="Как обращения поступили главному врачу"
+          title="Источники поступления 07/19"
+          description="Электронная почта, почта, личный прием и другие способы поступления"
           rows={chiefDoctorChannels}
-          barClass="bg-emerald-500"
-          pctClass="text-emerald-600 dark:text-emerald-400"
+          barClass="bg-positive"
+          pctClass="text-positive"
           currentYear={dashboard.comparison.currentYear}
           previousYear={dashboard.comparison.previousYear}
         />
       ) : (
         <DistributionCard
-          title="Источники 07-/01-"
-          description="Откуда поступило обращение"
+          title="Источники внешних контуров"
+          description="Организации и заявители внутри контуров 01-* и 07-*"
           rows={externalSources}
-          barClass="bg-violet-500"
-          pctClass="text-violet-600 dark:text-violet-400"
+          barClass="bg-accent-source"
+          pctClass="text-accent-source"
           currentYear={dashboard.comparison.currentYear}
           previousYear={dashboard.comparison.previousYear}
         />

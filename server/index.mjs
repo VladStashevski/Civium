@@ -6,6 +6,7 @@ import multipart from '@fastify/multipart'
 import Fastify from 'fastify'
 import {
   buildDashboardData,
+  isGratitudeRecord,
   normalizeManualRecord,
   selectComparablePeriod,
 } from '../scripts/complaints-parser.mjs'
@@ -149,7 +150,9 @@ app.get('/api/references', async (request) => {
   const mode = getAppealModeFilter(request.query?.mode)
   const modeRecords = filterRecordsByMode(store.records, mode)
   const comparable = selectComparablePeriod(modeRecords)
-  const records = [...comparable.previous, ...comparable.current]
+  const records = [...comparable.previous, ...comparable.current].filter(
+    (record) => !isGratitudeRecord(record)
+  )
   const references = buildReferenceData(records)
   if (mode === 'chiefDoctor') {
     references.sources = buildChannelReferences(records)
@@ -227,7 +230,7 @@ function buildChannelReferences(records) {
     .map(([name, item]) => ({
       id: `channel:${crypto.createHash('sha1').update(name).digest('hex').slice(0, 12)}`,
       name,
-      status: 'Канал поступления 07/19',
+      status: 'Источник поступления в контуре 07/19',
       count: item.count,
       years: item.years,
     }))
@@ -296,6 +299,17 @@ app.patch('/api/appeals', async (request, reply) => {
       if (request.body?.[key] !== undefined && !String(request.body[key]).trim()) {
         delete current.manualFields?.[key]
         delete manualFields[key]
+      }
+    }
+    if (request.body?.departments !== undefined) {
+      const departments = Array.isArray(request.body.departments)
+        ? request.body.departments.map((item) => String(item).trim()).filter(Boolean)
+        : []
+      if (departments.length) {
+        manualFields.departments = departments
+      } else {
+        delete current.manualFields?.departments
+        delete manualFields.departments
       }
     }
 

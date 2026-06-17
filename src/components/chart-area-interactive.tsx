@@ -112,16 +112,13 @@ export function ChartAreaInteractive({ mode }: { mode: AppealMode }) {
       color: 'var(--primary)',
     },
   } satisfies ChartConfig
-  const availablePeriods = PERIODS.filter(
-    (period) => period.months <= availableMonths,
-  )
 
   return (
     <Card className="@container/card">
       <CardHeader>
         <CardTitle>Динамика обращений</CardTitle>
         <CardDescription>
-          {mode === 'chiefDoctor' ? '07/19' : '07-/01-'} · сопоставимый период:{' '}
+          {mode === 'chiefDoctor' ? 'контур 07/19' : '01-* — Губернатор, 07-* — Депздрав'} · сопоставимый период:{' '}
           {dashboard.comparison.previousYear} и{' '}
           {dashboard.comparison.currentYear}
         </CardDescription>
@@ -154,8 +151,12 @@ export function ChartAreaInteractive({ mode }: { mode: AppealMode }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {availablePeriods.map((period) => (
-                  <SelectItem key={period.value} value={period.value}>
+                {PERIODS.map((period) => (
+                  <SelectItem
+                    key={period.value}
+                    value={period.value}
+                    disabled={period.months > availableMonths}
+                  >
                     {period.label}
                   </SelectItem>
                 ))}
@@ -206,7 +207,8 @@ export function ChartAreaInteractive({ mode }: { mode: AppealMode }) {
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
-                interval={0}
+                interval={isMobile ? 'preserveStartEnd' : 0}
+                minTickGap={isMobile ? 16 : 0}
                 tick={<MonthAxisTick lastIndex={chartData.length - 1} />}
               />
               <ChartTooltip

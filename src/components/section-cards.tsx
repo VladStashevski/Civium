@@ -1,8 +1,8 @@
 import {
-  IconArrowsExchange,
-  IconFolders,
+  IconChartBar,
+  IconClipboardCheck,
+  IconHeartHandshake,
   IconInbox,
-  IconStethoscope,
 } from '@tabler/icons-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -49,11 +49,12 @@ export function SectionCards({ mode }: { mode: AppealMode }) {
 
   const dashboard = normalizeDashboard(data)
   const { total, summary, comparison } = dashboard
-  const isChiefDoctor = mode === 'chiefDoctor'
-  const sourceKindCount = isChiefDoctor ? summary.channelCount : summary.sourceCount
-  const previousSourceKindCount = isChiefDoctor
-    ? comparison.previousSummary.channelCount
-    : comparison.previousSummary.sourceCount
+  const monthCount = Math.max(dashboard.byMonth.length, 1)
+  const currentMonthlyAverage = total / monthCount
+  const previousMonthlyAverage = comparison.previousTotal / monthCount
+  const missingShare = total
+    ? (summary.justificationMissingCount / total) * 100
+    : 0
   const metric = (current: number, previous: number) => ({
     current,
     previous,
@@ -63,31 +64,44 @@ export function SectionCards({ mode }: { mode: AppealMode }) {
   })
   const cards = [
     {
-      description: 'Всего обращений',
+      description: 'Обращения',
       ...metric(total, comparison.previousTotal),
       icon: IconInbox,
-      footTitle: `${comparison.previousYear} → ${comparison.currentYear}`,
+      value: total.toLocaleString('ru-RU'),
+      tone: 'badIncrease',
+      footTitle: `${comparison.previousYear}: ${comparison.previousTotal.toLocaleString('ru-RU')} · ${comparison.currentYear}: ${total.toLocaleString('ru-RU')}`,
     },
     {
-      description: 'Рубрики',
-      ...metric(summary.profileCount, comparison.previousSummary.profileCount),
-      icon: isChiefDoctor ? IconStethoscope : IconArrowsExchange,
-      footTitle: 'Уникальных рубрик',
+      description: 'Среднемесячно',
+      ...metric(currentMonthlyAverage, previousMonthlyAverage),
+      icon: IconChartBar,
+      value: currentMonthlyAverage.toLocaleString('ru-RU', {
+        maximumFractionDigits: 1,
+      }),
+      tone: 'badIncrease',
+      footTitle: `Нагрузка за ${monthCount} мес. сопоставимого периода`,
+      footMeta: `${comparison.previousYear}: ${previousMonthlyAverage.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} · ${comparison.currentYear}: ${currentMonthlyAverage.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}`,
     },
     {
-      description: 'Обоснованные',
-      ...metric(
-        summary.justifiedCount,
-        comparison.previousSummary.justifiedCount,
-      ),
-      icon: IconFolders,
-      footTitle: `${summary.justificationMissingCount} без оценки`,
+      description: 'Без оценки',
+      current: summary.justificationMissingCount,
+      previous: 0,
+      delta: summary.justificationMissingCount,
+      deltaPercent: missingShare,
+      icon: IconClipboardCheck,
+      value: summary.justificationMissingCount.toLocaleString('ru-RU'),
+      badgeText: `${missingShare.toFixed(1).replace('.', ',')}%`,
+      tone: 'badIncrease',
+      footTitle: 'Требуют ручной аннотации',
+      footMeta: `Оценено: ${(summary.justifiedCount + summary.unjustifiedCount).toLocaleString('ru-RU')} · ${missingShare.toFixed(1).replace('.', ',')}% без оценки`,
     },
     {
-      description: isChiefDoctor ? 'Каналы поступления' : 'Источники',
-      ...metric(sourceKindCount, previousSourceKindCount),
-      icon: IconArrowsExchange,
-      footTitle: isChiefDoctor ? 'Каналов 07/19' : 'Источников 07-/01-',
+      description: 'Благодарности',
+      ...metric(summary.gratitudeCount, comparison.previousSummary.gratitudeCount),
+      icon: IconHeartHandshake,
+      value: summary.gratitudeCount.toLocaleString('ru-RU'),
+      tone: 'goodIncrease',
+      footTitle: `${comparison.previousYear}: ${comparison.previousSummary.gratitudeCount.toLocaleString('ru-RU')} · ${comparison.currentYear}: ${summary.gratitudeCount.toLocaleString('ru-RU')}`,
     },
   ]
 
@@ -98,20 +112,28 @@ export function SectionCards({ mode }: { mode: AppealMode }) {
           <CardHeader>
             <CardDescription>{card.description}</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {card.current.toLocaleString('ru-RU')}
+              {card.value}
             </CardTitle>
             <CardAction>
               <Badge
                 variant="outline"
                 className={cn(
-                  card.delta > 0 &&
+                  card.tone === 'badIncrease' &&
+                    card.delta > 0 &&
                     'border-destructive/30 bg-destructive/5 text-destructive',
-                  card.delta < 0 &&
-                    'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400',
+                  card.tone === 'badIncrease' &&
+                    card.delta < 0 &&
+                    'border-positive/30 bg-positive/5 text-positive',
+                  card.tone === 'goodIncrease' &&
+                    card.delta > 0 &&
+                    'border-positive/30 bg-positive/5 text-positive',
+                  card.tone === 'goodIncrease' &&
+                    card.delta < 0 &&
+                    'border-destructive/30 bg-destructive/5 text-destructive',
                 )}
               >
                 <card.icon />
-                {formatDeltaPercent(card.deltaPercent)}
+                {card.badgeText ?? formatDeltaPercent(card.deltaPercent)}
               </Badge>
             </CardAction>
           </CardHeader>
@@ -119,11 +141,11 @@ export function SectionCards({ mode }: { mode: AppealMode }) {
             <div className="line-clamp-1 flex gap-2 font-medium">
               {card.footTitle}
             </div>
-            <div className="text-muted-foreground">
-              {comparison.previousYear}: {card.previous.toLocaleString('ru-RU')}
-              {' · '}
-              {comparison.currentYear}: {card.current.toLocaleString('ru-RU')}
-            </div>
+            {card.footMeta && (
+              <div className="text-muted-foreground">
+                {card.footMeta}
+              </div>
+            )}
           </CardFooter>
         </Card>
       ))}

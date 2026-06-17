@@ -20,6 +20,7 @@ export type ComparisonSummary = {
   channelCount: number
   justifiedCount: number
   unjustifiedCount: number
+  gratitudeCount: number
 }
 
 export type AppealsSummary = {
@@ -35,6 +36,7 @@ export type AppealsSummary = {
   channelCount: number
   locationCount: number
   rubricMissingCount: number
+  gratitudeCount: number
 }
 
 export type AppealsDashboard = {
@@ -73,6 +75,7 @@ const emptySummary: AppealsSummary = {
   channelCount: 0,
   locationCount: 0,
   rubricMissingCount: 0,
+  gratitudeCount: 0,
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
@@ -156,6 +159,7 @@ export function normalizeDashboard(value: unknown): AppealsDashboard {
       channelCount: numberValue(summary.channelCount),
       justifiedCount: numberValue(summary.justifiedCount),
       unjustifiedCount: numberValue(summary.unjustifiedCount),
+      gratitudeCount: numberValue(summary.gratitudeCount),
     }
   }
 
@@ -224,4 +228,24 @@ export function formatDateShort(iso: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '—'
   const [y, m, d] = iso.split('-')
   return `${d}.${m}.${y}`
+}
+
+export function isGratitudeAppeal(appeal: {
+  profile?: string
+  rubricTheme?: string
+  documentTopic?: string
+  officialCategory?: string
+  content?: string
+  [key: string]: unknown
+}): boolean {
+  return /благодар|спасибо|признательн|поощр/i.test(
+    [
+      appeal.profile,
+      appeal.rubricTheme,
+      appeal.documentTopic,
+      appeal.officialCategory,
+      appeal.content,
+      typeof appeal.rawRubric === 'string' ? appeal.rawRubric : '',
+    ].join(' '),
+  )
 }

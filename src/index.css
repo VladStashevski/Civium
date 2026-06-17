@@ -21,6 +21,9 @@
     --color-chart-3: var(--chart-3);
     --color-chart-2: var(--chart-2);
     --color-chart-1: var(--chart-1);
+    /* Семантические токены: динамика «вниз/хорошо» и акцент источников */
+    --color-positive: var(--positive);
+    --color-accent-source: var(--accent-source);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -73,6 +76,10 @@
     --chart-4: oklch(0.488 0.243 264.376);
     --chart-5: oklch(0.424 0.199 265.638);
     --comparison-previous: oklch(0.59 0.19 304);
+    /* Снижение числа обращений / «обоснованно» — зелёный (emerald ~600) */
+    --positive: oklch(0.596 0.145 163);
+    /* Акцент распределения по источникам внешних контуров — фиолетовый (violet ~500) */
+    --accent-source: oklch(0.606 0.25 292);
     --radius: 0.875rem;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.141 0.005 285.823);
@@ -109,6 +116,9 @@
     --chart-4: oklch(0.488 0.243 264.376);
     --chart-5: oklch(0.424 0.199 265.638);
     --comparison-previous: oklch(0.72 0.17 304);
+    /* В тёмной теме светлее для контраста на тёмной подложке (emerald ~400 / violet ~400) */
+    --positive: oklch(0.765 0.177 163);
+    --accent-source: oklch(0.71 0.2 293);
     --sidebar: oklch(0.21 0.006 285.885);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.623 0.214 259.815);
@@ -117,6 +127,56 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.552 0.016 285.938);
+}
+
+.appeals-pagination-value {
+    display: inline-block;
+    animation: appeals-fade-in 190ms ease-out both;
+    will-change: opacity;
+}
+
+/* Анимация только по opacity, БЕЗ смены display — для inline-flex кнопок (напр. «Сбросить»). */
+.appeals-fade-in {
+    animation: appeals-fade-in 190ms ease-out both;
+}
+
+.appeals-table-body-enter {
+    animation: appeals-fade-in 190ms ease-out both;
+}
+
+@keyframes appeals-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* «Поп» счётчика в кружке фасетного фильтра — на появление и на смену значения. */
+@keyframes appeals-badge-pop {
+    from {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.appeals-badge-pop {
+    display: inline-block;
+    animation: appeals-badge-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .appeals-pagination-value,
+    .appeals-fade-in,
+    .appeals-table-body-enter,
+    .appeals-badge-pop {
+        animation: none;
+    }
 }
 
 @layer base {
@@ -148,20 +208,15 @@
 
 @keyframes appeals-column-enter {
   from {
-    width: 0;
-    padding-inline: 0;
     opacity: 0;
-    clip-path: inset(0 100% 0 0);
   }
   to {
-    width: var(--appeals-column-width);
     opacity: 1;
-    clip-path: inset(0);
   }
 }
 
 .appeals-column-enter {
-  animation: appeals-column-enter 300ms ease-out both;
+  animation: appeals-column-enter 180ms ease-out both;
 }
 
 /* Глобальный скейлинг интерфейса под крупные экраны.

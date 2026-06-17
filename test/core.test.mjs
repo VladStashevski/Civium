@@ -7,7 +7,10 @@ import {
 import {
   mergeExcelRowsIntoStore,
   migrateAppealsStore,
+  normalizeAppealExcelRows,
+  readAppealExcelRows,
 } from '../scripts/appeals-store.mjs'
+import XLSX from 'xlsx'
 
 test('manual records receive unique generated identifiers', () => {
   const records = Array.from({ length: 100 }, () =>
@@ -55,6 +58,37 @@ test('dashboard includes classified profiles without a raw Excel rubric', () => 
       { name: 'Рубрика из Excel', count: 1 },
       { name: 'Рубрика классификатора', count: 1 },
     ]
+  )
+})
+
+test('dashboard excludes gratitude from analytical totals but counts it separately', () => {
+  const records = [
+    { ...makeRecord('07/19-ОГ-1'), content: 'Жалоба на лечение' },
+    {
+      ...makeRecord('07/19-ОГ-2'),
+      content: 'Благодарность врачу и медицинским сестрам',
+      profile: 'Лечение и оказание медицинской помощи',
+      rawRubric: '',
+    },
+    {
+      ...makeRecord('07/19-ОГ-3'),
+      dateIso: '2024-01-01',
+      year: 2024,
+      content: 'Благодарственное письмо отделению',
+      profile: 'Лечение и оказание медицинской помощи',
+      rawRubric: '',
+    },
+  ]
+
+  const dashboard = buildDashboardData(records)
+
+  assert.equal(dashboard.total, 1)
+  assert.equal(dashboard.summary.gratitudeCount, 1)
+  assert.equal(dashboard.comparison.previousSummary.gratitudeCount, 1)
+  assert.equal(dashboard.summary.profileCount, 1)
+  assert.deepEqual(
+    dashboard.byProfile.map(({ name, count }) => ({ name, count })),
+    [{ name: 'Тестовая рубрика', count: 1 }]
   )
 })
 
@@ -121,19 +155,19 @@ test('store separates registration route, source organization and channel', () =
   const [chiefDoctor, department, governor, president] = store.records
 
   assert.equal(chiefDoctor.appealMode, 'chiefDoctor')
-  assert.equal(chiefDoctor.registrationRoute, 'На имя главного врача (07/19)')
+  assert.equal(chiefDoctor.registrationRoute, '07/19 — главный врач')
   assert.equal(chiefDoctor.sourceChannel, 'E-mail')
   assert.match(chiefDoctor.sourceOrganization, /Непосредственно от заявителя/)
 
   assert.equal(department.appealMode, 'external')
-  assert.equal(department.registrationRoute, 'Депздрав Югры (07-*)')
+  assert.equal(department.registrationRoute, '07-* — Депздрав Югры')
   assert.equal(department.sourceOrganization, 'Органы прокуратуры')
   assert.equal(department.sourceChannel, 'СЭДД')
 
-  assert.equal(governor.registrationRoute, 'Губернатор Югры (01-*)')
+  assert.equal(governor.registrationRoute, '01-* — Губернатор Югры')
   assert.equal(governor.sourceOrganization, 'Органы прокуратуры')
 
-  assert.equal(president.registrationRoute, 'Депздрав Югры (07-*)')
+  assert.equal(president.registrationRoute, '07-* — Депздрав Югры')
   assert.equal(president.sourceOrganization, 'Администрация Президента РФ')
 })
 
@@ -157,6 +191,7 @@ test('reimport replaces the Excel snapshot and preserves manual data', () => {
   annotated.manualFields = {
     isJustified: true,
     notes: 'Проверено вручную',
+    departments: ['Неврология'],
   }
   firstImport.store.records.push({
     ...makeRecord('MANUAL-1'),
@@ -194,6 +229,7 @@ test('reimport replaces the Excel snapshot and preserves manual data', () => {
   assert.equal(updated.sourceChannel, 'E-mail')
   assert.equal(updated.manualFields.isJustified, true)
   assert.equal(updated.manualFields.notes, 'Проверено вручную')
+  assert.deepEqual(updated.manualFields.departments, ['Неврология'])
   assert.equal(updated.importHistory.length, 2)
 
   const dashboard = buildDashboardData(secondImport.store.records)
@@ -204,6 +240,74 @@ test('reimport replaces the Excel snapshot and preserves manual data', () => {
       { name: 'Курьер', count: 1 },
     ]
   )
+})
+
+test('appeal import handles PrintResult-style duplicated headers', () => {
+  const workbook = XLSX.utils.book_new()
+  const sheet = XLSX.utils.aoa_to_sheet([
+    [
+      'Вид',
+      '№ РК',
+      'Дата рег.',
+      'Содержание',
+      'Корр./Подписал',
+      'Файлы',
+      'Рубрика',
+      'Вид',
+      '№ РК',
+      'Дата рег.',
+      'Содержание',
+      'План (РК)',
+      'Факт (РК)',
+      'Группа документов - индекс',
+      'Сопровод. документ',
+      'Кому',
+      'Рубрика',
+      'Вид доставки РК',
+      'Сообщение ПОС №',
+      'От',
+    ],
+    [
+      'Гр',
+      '07/19-ОГ-10',
+      '12.01.2026',
+      'Жалоба на лечение в неврологическом отделении',
+      'Иванов Иван - Сургут',
+      '',
+      '',
+      'Гр',
+      '07/19-ОГ-10',
+      '12.01.2026',
+      'Жалоба на лечение в неврологическом отделении',
+      '10.02.2026',
+      '',
+      '07/19-ОГ',
+      'Проект 07/19-ОТ-15 от 14/01/2026',
+      '',
+      '(0002.0014.0143.0416) Качество оказания медицинской помощи взрослым в стационарных условиях',
+      'E-mail',
+      '',
+      '',
+    ],
+  ])
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Sheet1')
+
+  const rows = readAppealExcelRows(XLSX.write(workbook, { type: 'buffer', bookType: 'xls' }))
+  const records = normalizeAppealExcelRows(rows, {
+    sourceFile: 'PrintResult.xls',
+    importId: 'print-result-test',
+  })
+
+  assert.equal(records.length, 1)
+  assert.equal(records[0].id, '07/19-ОГ-10')
+  assert.equal(records[0].dateIso, '2026-01-12')
+  assert.equal(records[0].sourceChannel, 'E-mail')
+  assert.equal(
+    records[0].profile,
+    'Качество оказания медицинской помощи взрослым в стационарных условиях'
+  )
+  assert.equal(records[0].rubricTheme, 'Качество и оказание медицинской помощи')
+  assert.deepEqual(records[0].departments, ['Неврологическое отделение'])
 })
 
 function makeRecord(id, isJustified) {
