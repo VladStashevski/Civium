@@ -28,7 +28,10 @@ export type Appeal = {
   manualFields?: {
     isJustified?: boolean
     notes?: string
+    issues?: string
     departments?: string[]
+    annotationCreatedAt?: string
+    annotationUpdatedAt?: string
     [key: string]: unknown
   }
 }
@@ -43,6 +46,7 @@ export type AppealPatch = {
   uid: string
   isJustified?: boolean | null
   notes?: string
+  issues?: string
   departments?: string[]
 }
 

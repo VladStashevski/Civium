@@ -1,6 +1,5 @@
 import * as React from 'react'
 import {
-  CaretDownIcon,
   CheckIcon,
   PencilSimpleIcon,
   XIcon,
@@ -18,19 +17,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { usePatchAppeal } from '@/hooks/use-appeals'
 import type { Appeal } from '@/lib/api'
 import { formatDateShort } from '@/lib/appeals-data'
-import { DEPARTMENT_GROUPS, DEPARTMENT_OPTIONS } from '@/lib/departments'
+import { DEPARTMENT_OPTIONS, type DepartmentOption } from '@/lib/departments'
 import { cn } from '@/lib/utils'
 
 function justifiedToValue(v: boolean | undefined): string {
@@ -41,6 +34,22 @@ function normalizeSearch(value: string) {
   return value.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').trim()
 }
 
+const compactTextareaClass =
+  'h-20 min-h-0 w-full min-w-0 resize-none overflow-auto rounded-2xl px-3 py-2.5 text-sm break-words [field-sizing:fixed]'
+
+function formatAnnotationDate(value: unknown) {
+  if (typeof value !== 'string' || !value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
 function DepartmentSelect({
   value,
   onChange,
@@ -48,26 +57,21 @@ function DepartmentSelect({
   value: string[]
   onChange: (value: string[]) => void
 }) {
-  const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState('')
+  const [focused, setFocused] = React.useState(false)
   const selected = React.useMemo(() => new Set(value), [value])
   const search = normalizeSearch(query)
 
-  const visibleGroups = React.useMemo(
-    () =>
-      DEPARTMENT_GROUPS.map((group) => ({
-        ...group,
-        departments: DEPARTMENT_OPTIONS.filter(
-          (option) =>
-            option.profile === group.profile &&
-            (!search ||
-              normalizeSearch(
-                `${option.value} ${option.name} ${option.profile} ${option.aliases.join(' ')}`,
-              ).includes(search)),
-        ),
-      })).filter((group) => group.departments.length > 0),
-    [search],
-  )
+  const visibleOptions = React.useMemo(() => {
+    const matched = DEPARTMENT_OPTIONS.filter((option) => {
+      if (selected.has(option.value)) return false
+      if (!search) return false
+      return normalizeSearch(
+        `${option.value} ${option.name} ${option.profile} ${option.aliases.join(' ')}`,
+      ).includes(search)
+    })
+    return matched.slice(0, 6)
+  }, [search, selected])
 
   const toggle = (department: string) => {
     onChange(
@@ -77,115 +81,91 @@ function DepartmentSelect({
     )
   }
 
-  return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <Label>Отделения</Label>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-auto min-h-9 w-full justify-between whitespace-normal px-3 py-2 text-left"
-          >
-            <span className="min-w-0 truncate text-muted-foreground">
-              {value.length ? `Выбрано: ${value.length}` : 'Выберите отделения'}
-            </span>
-            <CaretDownIcon
-              className={cn(
-                'size-4 shrink-0 opacity-60 transition-transform',
-                open && 'rotate-180',
-              )}
-            />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          side="bottom"
-          sideOffset={6}
-          avoidCollisions={false}
-          className="w-[min(32rem,calc(100vw-2rem))] gap-3 rounded-xl p-3"
-          onWheelCapture={(event) => event.stopPropagation()}
-          onTouchMoveCapture={(event) => event.stopPropagation()}
-        >
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Поиск по отделениям…"
-            className="h-9"
-          />
-          <div
-            className="max-h-[min(18rem,calc(100svh-12rem))] overflow-y-auto overscroll-contain scroll-smooth pr-1"
-            onWheelCapture={(event) => event.stopPropagation()}
-            onTouchMoveCapture={(event) => event.stopPropagation()}
-          >
-            {visibleGroups.length ? (
-              visibleGroups.map((group) => (
-                <div key={group.profile} className="py-1.5 first:pt-0">
-                  <div className="px-1 pb-1 text-xs font-medium text-muted-foreground">
-                    {group.profile}
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    {group.departments.map((option) => {
-                      const checked = selected.has(option.value)
-                      return (
-                        <button
-                          key={option.id}
-                          type="button"
-                          className={cn(
-                            'flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted',
-                            checked && 'bg-muted',
-                          )}
-                          onClick={() => toggle(option.value)}
-                        >
-                          <span
-                            className={cn(
-                              'flex size-4 shrink-0 items-center justify-center rounded border',
-                              checked
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'border-input',
-                            )}
-                          >
-                            {checked && <CheckIcon className="size-3" />}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate">
-                            {option.value}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="py-6 text-center text-sm text-muted-foreground">
-                Ничего не найдено
-              </div>
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
+  const add = (option: DepartmentOption) => {
+    if (!selected.has(option.value)) onChange([...value, option.value])
+    setQuery('')
+  }
 
-      {value.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+  const showSuggestions = Boolean(search)
+
+  return (
+    <div className="relative flex min-w-0 flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label>Отделения</Label>
+        {value.length > 0 && (
+          <span className="text-xs font-medium text-foreground/60">
+            {value.length}
+          </span>
+        )}
+      </div>
+      <div
+        className={cn(
+          'rounded-2xl border bg-input/45 px-2.5 py-2 transition-[border-color,box-shadow,background-color] duration-150',
+          focused && 'border-ring bg-background ring-3 ring-ring/20',
+        )}
+      >
+        <div className="flex max-h-20 min-w-0 flex-wrap items-center gap-1.5 overflow-y-auto">
           {value.map((department) => (
             <Badge
               key={department}
               variant="secondary"
-              className="h-auto max-w-full gap-1 rounded-md py-1 pr-1"
+              className="h-7 max-w-full gap-1 rounded-full px-2"
             >
-              <span className="truncate">{department}</span>
+              <span className="max-w-56 truncate">{department}</span>
               <button
                 type="button"
-                className="rounded-full p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
-                onClick={() =>
-                  onChange(value.filter((item) => item !== department))
-                }
+                className="rounded-full p-0.5 text-foreground/65 transition-colors hover:bg-background hover:text-foreground"
+                onClick={() => toggle(department)}
                 aria-label={`Убрать ${department}`}
               >
                 <XIcon className="size-3" />
               </button>
             </Badge>
           ))}
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => window.setTimeout(() => setFocused(false), 120)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && visibleOptions[0]) {
+                event.preventDefault()
+                add(visibleOptions[0])
+              }
+            }}
+            placeholder={value.length ? 'Добавить отделение…' : 'Найти отделение…'}
+            className="h-7 min-w-36 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-foreground/45"
+          />
+        </div>
+      </div>
+
+      {showSuggestions && (
+        <div className="absolute top-full right-0 left-0 z-50 mt-2 max-h-52 overflow-y-auto rounded-2xl bg-popover p-1.5 text-sm shadow-lg ring-1 ring-foreground/10">
+          {visibleOptions.length ? (
+            <div className="grid gap-1">
+              {visibleOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => add(option)}
+                  className="group flex min-h-8 items-center gap-2 rounded-xl px-2.5 py-1.5 text-left transition-colors hover:bg-primary/10"
+                >
+                  <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-input text-primary group-hover:border-primary/40">
+                    <CheckIcon className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{option.value}</span>
+                  <span className="shrink-0 text-xs text-foreground/55">
+                    {option.profile.replace(' профиль', '')}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="px-2 py-3 text-center text-sm text-foreground/60">
+              Ничего не найдено
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -197,11 +177,13 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
   const [open, setOpen] = React.useState(false)
   const [justified, setJustified] = React.useState('none')
   const [notes, setNotes] = React.useState('')
+  const [issues, setIssues] = React.useState('')
   const [departments, setDepartments] = React.useState<string[]>([])
 
   const openEditor = () => {
     setJustified(justifiedToValue(appeal.manualFields?.isJustified))
     setNotes(appeal.manualFields?.notes ?? '')
+    setIssues(appeal.manualFields?.issues ?? '')
     setDepartments(appeal.manualFields?.departments ?? [])
     setOpen(true)
   }
@@ -209,7 +191,11 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
   const hasAnnotation =
     appeal.manualFields?.isJustified !== undefined ||
     Boolean(appeal.manualFields?.notes) ||
+    Boolean(appeal.manualFields?.issues) ||
     Boolean(appeal.manualFields?.departments?.length)
+  const annotationDate = formatAnnotationDate(
+    appeal.manualFields?.annotationUpdatedAt,
+  )
 
   const save = () => {
     mutate(
@@ -217,6 +203,7 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
         uid: appeal.uid,
         isJustified: justified === 'yes' ? true : justified === 'no' ? false : null,
         notes,
+        issues,
         departments,
       },
       {
@@ -231,7 +218,11 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
       <Button
         variant="ghost"
         size="icon"
-        className="size-8 text-muted-foreground"
+        className={cn(
+          'size-8 text-foreground/75 transition-[background-color,color,box-shadow] duration-150 hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary',
+          hasAnnotation &&
+            'bg-primary/10 text-primary hover:bg-primary/15',
+        )}
         onClick={openEditor}
         aria-label={`Редактировать обращение № ${appeal.id}`}
         title="Редактировать"
@@ -240,46 +231,58 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[calc(100svh-2rem)] gap-4 overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Редактирование обращения</DialogTitle>
-            <DialogDescription className="truncate">
-              № {appeal.id} · {appeal.correspondent}
-            </DialogDescription>
-            <p className="text-xs text-muted-foreground">
-              Дата обращения: {formatDateShort(appeal.dateIso)}
+        <DialogContent className="max-h-[calc(100svh-2rem)] gap-3.5 overflow-visible rounded-3xl px-5 py-5 sm:max-w-[34rem] sm:px-6">
+          <DialogHeader className="gap-1">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
+                <DialogTitle>Аннотация обращения</DialogTitle>
+                <DialogDescription className="truncate">
+                  № {appeal.id} · {appeal.correspondent}
+                </DialogDescription>
+              </div>
+              {annotationDate && (
+                <div className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-medium whitespace-nowrap">
+                  Изменено {annotationDate}
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-foreground/70">
+              {formatDateShort(appeal.dateIso)}
               {appeal.profile ? ` · ${appeal.profile}` : ''}
             </p>
           </DialogHeader>
 
-          <div className="flex min-w-0 flex-col gap-5">
-            <div className="max-h-40 min-w-0 overflow-auto rounded-md border bg-muted/40 p-3">
-              <p className="text-sm break-words whitespace-pre-wrap">
+          <div className="flex min-w-0 flex-col gap-3">
+            <div
+              className="min-w-0 rounded-2xl border bg-muted/45 px-3 py-2 text-sm"
+              title={appeal.content}
+            >
+              <p className="truncate">
                 {appeal.content}
               </p>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <Label>Обоснованность</Label>
+            <div className="grid items-center gap-2 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
+              <Label className="text-sm">Обоснованность</Label>
               <ToggleGroup
                 type="single"
                 variant="outline"
                 value={justified}
                 onValueChange={(v) => v && setJustified(v)}
-                className="flex-wrap justify-start"
+                className="flex-wrap justify-start gap-1.5"
               >
-                <ToggleGroupItem value="none" className="px-4">
+                <ToggleGroupItem value="none" className="h-8 px-3">
                   Не задано
                 </ToggleGroupItem>
                 <ToggleGroupItem
                   value="yes"
-                  className="px-4 data-[state=on]:border-emerald-500/40 data-[state=on]:bg-emerald-500/10 data-[state=on]:text-emerald-700 dark:data-[state=on]:text-emerald-400"
+                  className="h-8 px-3 data-[state=on]:border-emerald-500/40 data-[state=on]:bg-emerald-500/10 data-[state=on]:text-emerald-700 dark:data-[state=on]:text-emerald-400"
                 >
                   Обоснованно
                 </ToggleGroupItem>
                 <ToggleGroupItem
                   value="no"
-                  className="px-4 data-[state=on]:border-destructive/40 data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive"
+                  className="h-8 px-3 data-[state=on]:border-destructive/40 data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive"
                 >
                   Не обоснованно
                 </ToggleGroupItem>
@@ -291,19 +294,32 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
               onChange={setDepartments}
             />
 
-            <div className="flex min-w-0 flex-col gap-2">
-              <Label htmlFor="appeal-notes">Комментарий</Label>
-              <Textarea
-                id="appeal-notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Комментарий к обращению…"
-                className="min-h-28 w-full min-w-0 resize-none break-words"
-              />
+            <div className="grid min-w-0 gap-3 md:grid-cols-2">
+              <div className="flex min-w-0 flex-col gap-2">
+                <Label htmlFor="appeal-issues">Выявлено и решено</Label>
+                <Textarea
+                  id="appeal-issues"
+                  value={issues}
+                  onChange={(e) => setIssues(e.target.value)}
+                  placeholder="Проблемы и решение…"
+                  className={compactTextareaClass}
+                />
+              </div>
+
+              <div className="flex min-w-0 flex-col gap-2">
+                <Label htmlFor="appeal-notes">Комментарий</Label>
+                <Textarea
+                  id="appeal-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Комментарий…"
+                  className={compactTextareaClass}
+                />
+              </div>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="pt-1">
             {hasAnnotation && (
               <Button
                 variant="ghost"
@@ -311,7 +327,13 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
                 disabled={isPending}
                 onClick={() =>
                   mutate(
-                    { uid: appeal.uid, isJustified: null, notes: '', departments: [] },
+                    {
+                      uid: appeal.uid,
+                      isJustified: null,
+                      notes: '',
+                      issues: '',
+                      departments: [],
+                    },
                     {
                       onSuccess: () => setOpen(false),
                       onError: () =>

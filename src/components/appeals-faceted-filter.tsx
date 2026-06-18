@@ -69,11 +69,11 @@ export function FacetedFilter<T>({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-auto min-w-52 max-w-80 overflow-hidden p-0"
+        className="w-auto min-w-52 max-w-80 gap-0 overflow-hidden p-0"
         align="start"
         sideOffset={6}
       >
-        <div className="max-h-80 overflow-y-auto p-2.5">
+        <div className="max-h-80 overflow-y-auto py-2">
           {options.map((option) => {
             const isSelected = selected.has(option.value)
             const count = facets?.get(option.value)
@@ -81,7 +81,7 @@ export function FacetedFilter<T>({
               <button
                 key={option.value}
                 type="button"
-                className="flex w-full items-start gap-2.5 rounded-xl px-3 py-2 text-left text-sm outline-none transition-colors hover:bg-accent focus-visible:bg-accent"
+                className="mx-2 flex w-[calc(100%-1rem)] items-start gap-2.5 rounded-xl px-3 py-2 text-left text-sm outline-none transition-colors hover:bg-accent focus-visible:bg-accent"
                 onClick={() => {
                   const next = new Set(selected)
                   if (isSelected) next.delete(option.value)
@@ -100,7 +100,7 @@ export function FacetedFilter<T>({
                 >
                   <CheckIcon
                     className={cn(
-                      'size-3 transition-opacity duration-160',
+                      'size-3 transition-opacity duration-200',
                       isSelected ? 'opacity-100' : 'opacity-0',
                     )}
                     weight="bold"
@@ -134,7 +134,7 @@ export function FacetedFilter<T>({
           )}
         >
           <div className="overflow-hidden">
-            <div className="border-t p-1.5">
+            <div className="border-t px-2.5 pt-2 pb-2.5">
               <button
                 type="button"
                 tabIndex={selected.size > 0 ? 0 : -1}

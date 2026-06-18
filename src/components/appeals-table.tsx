@@ -47,6 +47,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -73,6 +78,7 @@ const COLUMN_LABELS: Record<string, string> = {
   rubricTheme: 'Тематика',
   departments: 'Отделения',
   justified: 'Обоснованность',
+  issues: 'Проблемы',
   notes: 'Комментарий',
 }
 
@@ -100,17 +106,60 @@ const inArray: FilterFn<Appeal> = (row, columnId, value) => {
 }
 
 function TruncatedCell({ text, className }: { text?: string; className?: string }) {
+  const textRef = React.useRef<HTMLSpanElement>(null)
+  const [isTruncated, setIsTruncated] = React.useState(false)
+
+  React.useEffect(() => {
+    const element = textRef.current
+    if (!element || !text) {
+      setIsTruncated(false)
+      return
+    }
+
+    const update = () => {
+      setIsTruncated(element.scrollWidth > element.clientWidth + 1)
+    }
+
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [text])
+
   if (!text) return <span className="text-muted-foreground/60">—</span>
   return (
-    <span
-      title={text}
-      className={cn(
-        'block w-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap',
-        className,
-      )}
-    >
-      {text}
-    </span>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={!isTruncated}
+          title={text}
+          className={cn(
+            'block w-full min-w-0 overflow-hidden text-left disabled:pointer-events-none',
+            isTruncated &&
+              'cursor-pointer underline-offset-2 decoration-dotted hover:underline aria-expanded:underline',
+            className,
+          )}
+          aria-label={isTruncated ? `Показать полностью: ${text}` : undefined}
+        >
+          <span
+            ref={textRef}
+            className="block w-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
+          >
+            {text}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={8}
+        className="max-h-80 w-auto max-w-md overflow-auto"
+      >
+        <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
+          {text}
+        </p>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -208,7 +257,7 @@ function SortHeader({
     <Button
       variant="ghost"
       size="sm"
-      className="-ml-2 h-8 max-w-full min-w-0 justify-start overflow-hidden"
+      className="h-8 max-w-full min-w-0 justify-start overflow-hidden px-2"
       onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
     >
       <span className="truncate">{children}</span>
@@ -374,6 +423,20 @@ const columns: ColumnDef<Appeal>[] = [
     },
   },
   {
+    id: 'issues',
+    size: 210,
+    minSize: 170,
+    maxSize: 520,
+    accessorFn: (a) => a.manualFields?.issues ?? '',
+    header: 'Проблемы',
+    enableSorting: false,
+    cell: ({ row }) => (
+      <TruncatedCell
+        text={row.original.manualFields?.issues}
+      />
+    ),
+  },
+  {
     id: 'notes',
     size: 190,
     minSize: 170,
@@ -410,6 +473,7 @@ const DEFAULT_HIDDEN: VisibilityState = {
   rubricTheme: false,
   departments: false,
   justified: false,
+  issues: false,
   notes: false,
 }
 
@@ -425,6 +489,7 @@ const COLUMN_MIN_WIDTHS: Record<string, number> = {
   rubricTheme: 150,
   departments: 170,
   justified: 220,
+  issues: 170,
   notes: 170,
   actions: 52,
 }
@@ -453,6 +518,9 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({})
   const [enteringColumnId, setEnteringColumnId] = React.useState<string | null>(
+    null,
+  )
+  const [exitingColumnId, setExitingColumnId] = React.useState<string | null>(
     null,
   )
   const enteringColumnTimer = React.useRef<number | undefined>(undefined)
@@ -569,14 +637,28 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
   )
 
   const setColumnVisible = (column: Column<Appeal>, visible: boolean) => {
+    window.clearTimeout(enteringColumnTimer.current)
+
     if (visible && !column.getIsVisible()) {
       window.clearTimeout(enteringColumnTimer.current)
       setEnteringColumnId(column.id)
+      column.toggleVisibility(true)
       enteringColumnTimer.current = window.setTimeout(
         () => setEnteringColumnId(null),
         260,
       )
+      return
     }
+
+    if (!visible && column.getIsVisible()) {
+      setExitingColumnId(column.id)
+      enteringColumnTimer.current = window.setTimeout(() => {
+        column.toggleVisibility(false)
+        setExitingColumnId(null)
+      }, 220)
+      return
+    }
+
     column.toggleVisibility(visible)
   }
 
@@ -782,6 +864,8 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
                             'text-center',
                           header.column.id === enteringColumnId &&
                             'appeals-column-enter',
+                          header.column.id === exitingColumnId &&
+                            'appeals-column-exit',
                           isResizingColumn && 'transition-none',
                         )}
                         style={
@@ -867,6 +951,8 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
                                 'text-center',
                               cell.column.id === enteringColumnId &&
                                 'appeals-column-enter',
+                              cell.column.id === exitingColumnId &&
+                                'appeals-column-exit',
                               isResizingColumn && 'transition-none',
                             )}
                             style={

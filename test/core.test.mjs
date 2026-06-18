@@ -191,7 +191,10 @@ test('reimport replaces the Excel snapshot and preserves manual data', () => {
   annotated.manualFields = {
     isJustified: true,
     notes: 'Проверено вручную',
+    issues: 'Выявлена задержка записи, пациент записан повторно',
     departments: ['Неврология'],
+    annotationCreatedAt: '2026-06-17T08:00:00.000Z',
+    annotationUpdatedAt: '2026-06-17T09:00:00.000Z',
   }
   firstImport.store.records.push({
     ...makeRecord('MANUAL-1'),
@@ -229,7 +232,13 @@ test('reimport replaces the Excel snapshot and preserves manual data', () => {
   assert.equal(updated.sourceChannel, 'E-mail')
   assert.equal(updated.manualFields.isJustified, true)
   assert.equal(updated.manualFields.notes, 'Проверено вручную')
+  assert.equal(
+    updated.manualFields.issues,
+    'Выявлена задержка записи, пациент записан повторно'
+  )
   assert.deepEqual(updated.manualFields.departments, ['Неврология'])
+  assert.equal(updated.manualFields.annotationCreatedAt, '2026-06-17T08:00:00.000Z')
+  assert.equal(updated.manualFields.annotationUpdatedAt, '2026-06-17T09:00:00.000Z')
   assert.equal(updated.importHistory.length, 2)
 
   const dashboard = buildDashboardData(secondImport.store.records)

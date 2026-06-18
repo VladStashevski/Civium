@@ -190,6 +190,7 @@ app.get('/api/appeals', async (request) => {
         record.sourceChannel,
         record.manualFields?.responsible,
         record.manualFields?.notes,
+        record.manualFields?.issues,
         ...(record.manualFields?.departments ?? record.departments ?? []),
       ]
         .join(' ')
@@ -295,7 +296,7 @@ app.patch('/api/appeals', async (request, reply) => {
     } else if (isJustified !== undefined) {
       manualFields.isJustified = Boolean(isJustified)
     }
-    for (const key of ['responsible', 'notes']) {
+    for (const key of ['responsible', 'notes', 'issues']) {
       if (request.body?.[key] !== undefined && !String(request.body[key]).trim()) {
         delete current.manualFields?.[key]
         delete manualFields[key]
@@ -313,9 +314,31 @@ app.patch('/api/appeals', async (request, reply) => {
       }
     }
 
+    const hasAnnotationPatch =
+      request.body?.isJustified !== undefined ||
+      request.body?.notes !== undefined ||
+      request.body?.issues !== undefined ||
+      request.body?.departments !== undefined
+
     current.manualFields = {
       ...(current.manualFields ?? {}),
       ...manualFields,
+    }
+    if (hasAnnotationPatch) {
+      const hasAnnotation =
+        current.manualFields?.isJustified !== undefined ||
+        Boolean(String(current.manualFields?.notes ?? '').trim()) ||
+        Boolean(String(current.manualFields?.issues ?? '').trim()) ||
+        Boolean(current.manualFields?.departments?.length)
+
+      if (hasAnnotation) {
+        current.manualFields.annotationCreatedAt =
+          current.manualFields.annotationCreatedAt || now
+        current.manualFields.annotationUpdatedAt = now
+      } else {
+        delete current.manualFields?.annotationCreatedAt
+        delete current.manualFields?.annotationUpdatedAt
+      }
     }
     current.updatedAt = now
     current.normalized = {

@@ -60,16 +60,16 @@
     --popover-foreground: oklch(0.141 0.005 285.823);
     --primary: oklch(0.488 0.243 264.376);
     --primary-foreground: oklch(0.97 0.014 254.604);
-    --secondary: oklch(0.967 0.001 286.375);
+    --secondary: oklch(0.945 0.004 286.32);
     --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.967 0.001 286.375);
-    --muted-foreground: oklch(0.552 0.016 285.938);
-    --accent: oklch(0.967 0.001 286.375);
+    --muted: oklch(0.94 0.004 286.32);
+    --muted-foreground: oklch(0.24 0.008 285.885);
+    --accent: oklch(0.935 0.005 286.32);
     --accent-foreground: oklch(0.21 0.006 285.885);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.92 0.004 286.32);
-    --input: oklch(0.92 0.004 286.32);
-    --ring: oklch(0.705 0.015 286.067);
+    --border: oklch(0.875 0.006 286.32);
+    --input: oklch(0.91 0.005 286.32);
+    --ring: oklch(0.62 0.024 286.067);
     --chart-1: oklch(0.809 0.105 251.813);
     --chart-2: oklch(0.623 0.214 259.815);
     --chart-3: oklch(0.546 0.245 262.881);
@@ -81,14 +81,14 @@
     /* Акцент распределения по источникам внешних контуров — фиолетовый (violet ~500) */
     --accent-source: oklch(0.606 0.25 292);
     --radius: 0.875rem;
-    --sidebar: oklch(0.985 0 0);
+    --sidebar: oklch(0.975 0.002 286.32);
     --sidebar-foreground: oklch(0.141 0.005 285.823);
     --sidebar-primary: oklch(0.546 0.245 262.881);
     --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
-    --sidebar-accent: oklch(0.967 0.001 286.375);
+    --sidebar-accent: oklch(0.94 0.004 286.32);
     --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-    --sidebar-border: oklch(0.92 0.004 286.32);
-    --sidebar-ring: oklch(0.705 0.015 286.067);
+    --sidebar-border: oklch(0.875 0.006 286.32);
+    --sidebar-ring: oklch(0.62 0.024 286.067);
 }
 
 .dark {
@@ -208,15 +208,44 @@
 
 @keyframes appeals-column-enter {
   from {
+    width: 0;
+    min-width: 0;
+    padding-inline: 0;
     opacity: 0;
   }
   to {
+    width: var(--appeals-column-width);
     opacity: 1;
   }
 }
 
 .appeals-column-enter {
-  animation: appeals-column-enter 180ms ease-out both;
+  animation: appeals-column-enter 240ms ease-out both;
+}
+
+@keyframes appeals-column-exit {
+  from {
+    width: var(--appeals-column-width);
+    opacity: 1;
+  }
+  to {
+    width: 0;
+    min-width: 0;
+    padding-inline: 0;
+    opacity: 0;
+  }
+}
+
+.appeals-column-exit {
+  animation: appeals-column-exit 220ms ease-in both;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .appeals-column-enter,
+  .appeals-column-exit {
+    animation: none;
+  }
 }
 
 /* Глобальный скейлинг интерфейса под крупные экраны.

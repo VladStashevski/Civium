@@ -72,6 +72,9 @@ const MANUAL_FIELD_KEYS = [
   'isJustified',
   'justified',
   'notes',
+  'issues',
+  'annotationCreatedAt',
+  'annotationUpdatedAt',
 ]
 
 const DEPARTMENT_RULES = [
@@ -1694,6 +1697,7 @@ function toAppealSummary(record) {
     departments: getEffectiveDepartments(record),
     responsible: record.manualFields?.responsible ?? '',
     notes: record.manualFields?.notes ?? '',
+    issues: record.manualFields?.issues ?? '',
     recipient: record.recipient ?? 'Не указан',
     source: record.documentSource || record.source,
   }
