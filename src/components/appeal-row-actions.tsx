@@ -1,12 +1,7 @@
 import * as React from 'react'
-import {
-  CheckIcon,
-  PencilSimpleIcon,
-  XIcon,
-} from '@phosphor-icons/react'
+import { CheckIcon, PencilSimpleIcon } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -16,26 +11,24 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { usePatchAppeal } from '@/hooks/use-appeals'
 import type { Appeal } from '@/lib/api'
 import { formatDateShort } from '@/lib/appeals-data'
-import { DEPARTMENT_OPTIONS, type DepartmentOption } from '@/lib/departments'
+import {
+  DEPARTMENT_BY_NAME,
+  DEPARTMENT_GROUPS,
+  departmentShortLabel,
+} from '@/lib/departments'
 import { cn } from '@/lib/utils'
 
 function justifiedToValue(v: boolean | undefined): string {
   return v === true ? 'yes' : v === false ? 'no' : 'none'
 }
-
-function normalizeSearch(value: string) {
-  return value.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').trim()
-}
-
-const compactTextareaClass =
-  'h-20 min-h-0 w-full min-w-0 resize-none overflow-auto rounded-2xl px-3 py-2.5 text-sm break-words [field-sizing:fixed]'
 
 function formatAnnotationDate(value: unknown) {
   if (typeof value !== 'string' || !value) return ''
@@ -45,9 +38,109 @@ function formatAnnotationDate(value: unknown) {
     day: '2-digit',
     month: '2-digit',
     year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
   }).format(date)
+}
+
+// Смена цифры: старая убирается мгновенно, новая появляется сразу на ПОЛНОЙ
+// непрозрачности и лишь чуть подрастает по масштабу (zoom, без fade). Нет ни
+// пустого кадра, ни наложения двух цифр (ghosting давал «мигание»), ни клиппинга
+// (масштаб). На появлении бейджа цифра статична — за появление отвечает
+// прозрачность самой обёртки, иначе анимации перемножаются и цифра мигает.
+function RollingDigits({ value }: { value: number }) {
+  const [current, setCurrent] = React.useState(value)
+  const [changed, setChanged] = React.useState(false)
+  if (current !== value) {
+    setCurrent(value)
+    setChanged(true)
+  }
+  React.useEffect(() => {
+    if (!changed) return
+    const timer = window.setTimeout(() => setChanged(false), 200)
+    return () => window.clearTimeout(timer)
+  }, [changed])
+
+  return (
+    <span
+      key={current}
+      className={cn(
+        'inline-block',
+        changed &&
+          'duration-200 animate-in zoom-in-90 [animation-timing-function:cubic-bezier(0.34,1.3,0.7,1)]',
+      )}
+    >
+      {current}
+    </span>
+  )
+}
+
+function CountBadge({ count }: { count: number }) {
+  const [prevCount, setPrevCount] = React.useState(count)
+  // во время схлопывания держим последнее положительное число (не показываем 0)
+  const [display, setDisplay] = React.useState(count)
+  if (prevCount !== count) {
+    setPrevCount(count)
+    if (count > 0) setDisplay(count)
+  }
+
+  const visible = count > 0
+
+  // Меряем фактическую ширину бейджа СИНХРОННО при смене числа (useLayoutEffect
+  // в том же кадре) — без лага ResizeObserver, иначе ширина (и сдвиг лейбла)
+  // доезжает на кадр позже цифры и в конце «доскакивает». tabular-nums держит
+  // одинаковую ширину цифр, так что ширина меняется только при 1↔2 знаках.
+  const badgeRef = React.useRef<HTMLSpanElement>(null)
+  const [width, setWidth] = React.useState<number>()
+  React.useLayoutEffect(() => {
+    if (badgeRef.current) setWidth(badgeRef.current.offsetWidth)
+  }, [display])
+
+  return (
+    <span
+      aria-hidden={!visible}
+      style={{ width: visible ? width : 0 }}
+      className={cn(
+        'inline-flex overflow-hidden transition-[width,margin-left,opacity] duration-200 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]',
+        visible ? 'ml-1 opacity-100' : 'ml-0 opacity-0',
+      )}
+    >
+      <span
+        ref={badgeRef}
+        className="flex h-3.5 min-w-3.5 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[0.625rem] font-semibold text-primary-foreground tabular-nums"
+      >
+        <RollingDigits key={visible ? 'on' : 'off'} value={display} />
+      </span>
+    </span>
+  )
+}
+
+function DepartmentChip({
+  name,
+  label,
+  selected,
+  onToggle,
+}: {
+  name: string
+  label: string
+  selected: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      title={name}
+      data-selected={selected}
+      onClick={onToggle}
+      className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-[color,background-color,border-color,transform] duration-150 ease-out active:translate-y-px data-[selected=false]:bg-background data-[selected=false]:text-foreground/80 data-[selected=false]:hover:border-primary/40 data-[selected=false]:hover:bg-primary/5 data-[selected=true]:border-primary data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground"
+    >
+      {selected && (
+        <CheckIcon
+          weight="bold"
+          className="size-3 shrink-0 duration-150 animate-in zoom-in-50 fade-in-0"
+        />
+      )}
+      <span className="truncate">{label}</span>
+    </button>
+  )
 }
 
 function DepartmentSelect({
@@ -57,118 +150,149 @@ function DepartmentSelect({
   value: string[]
   onChange: (value: string[]) => void
 }) {
-  const [query, setQuery] = React.useState('')
-  const [focused, setFocused] = React.useState(false)
   const selected = React.useMemo(() => new Set(value), [value])
-  const search = normalizeSearch(query)
+  const [activeProfile, setActiveProfile] = React.useState<string>(
+    DEPARTMENT_GROUPS[0].profile,
+  )
 
-  const visibleOptions = React.useMemo(() => {
-    const matched = DEPARTMENT_OPTIONS.filter((option) => {
-      if (selected.has(option.value)) return false
-      if (!search) return false
-      return normalizeSearch(
-        `${option.value} ${option.name} ${option.profile} ${option.aliases.join(' ')}`,
-      ).includes(search)
-    })
-    return matched.slice(0, 6)
-  }, [search, selected])
-
-  const toggle = (department: string) => {
+  const toggle = (name: string) => {
     onChange(
-      selected.has(department)
-        ? value.filter((item) => item !== department)
-        : [...value, department],
+      selected.has(name)
+        ? value.filter((item) => item !== name)
+        : [...value, name],
     )
   }
 
-  const add = (option: DepartmentOption) => {
-    if (!selected.has(option.value)) onChange([...value, option.value])
-    setQuery('')
-  }
+  const countByProfile = React.useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const name of value) {
+      const option = DEPARTMENT_BY_NAME.get(name)
+      if (option)
+        counts.set(option.profile, (counts.get(option.profile) ?? 0) + 1)
+    }
+    return counts
+  }, [value])
 
-  const showSuggestions = Boolean(search)
+  const activeGroup =
+    DEPARTMENT_GROUPS.find((g) => g.profile === activeProfile) ??
+    DEPARTMENT_GROUPS[0]
+
+  // Высота через FLIP. Чипы активного профиля рендерим сами (а не через Radix
+  // TabsContent, который подменяет контент НЕ синхронно со стейтом) — поэтому
+  // layout-эффект меряет новую высоту корректно. При смене профиля анимируем
+  // (старая высота → reflow → новая), при выборе чипа ставим высоту мгновенно,
+  // чтобы не было reveal/обрезки. Никакого лага и кадра-скачка.
+  const outerRef = React.useRef<HTMLDivElement>(null)
+  const innerRef = React.useRef<HTMLDivElement>(null)
+  const prevHeight = React.useRef<number | null>(null)
+  const prevProfile = React.useRef(activeProfile)
+  React.useLayoutEffect(() => {
+    const outer = outerRef.current
+    const inner = innerRef.current
+    if (!outer || !inner) return
+    const next = inner.offsetHeight
+    const prev = prevHeight.current
+    const profileChanged = prevProfile.current !== activeProfile
+    prevHeight.current = next
+    prevProfile.current = activeProfile
+    if (prev === null || prev === next || !profileChanged) {
+      outer.style.transition = 'none'
+      outer.style.height = `${next}px`
+      return
+    }
+    outer.style.transition = 'none'
+    outer.style.height = `${prev}px`
+    void outer.offsetHeight // форсим reflow, чтобы зафиксировать старую высоту
+    outer.style.transition = 'height 240ms cubic-bezier(0.22, 1, 0.36, 1)'
+    outer.style.height = `${next}px`
+  }, [activeProfile, value])
 
   return (
-    <div className="relative flex min-w-0 flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <Label>Отделения</Label>
-        {value.length > 0 && (
-          <span className="text-xs font-medium text-foreground/60">
-            {value.length}
-          </span>
-        )}
-      </div>
-      <div
-        className={cn(
-          'rounded-2xl border bg-input/45 px-2.5 py-2 transition-[border-color,box-shadow,background-color] duration-150',
-          focused && 'border-ring bg-background ring-3 ring-ring/20',
-        )}
-      >
-        <div className="flex max-h-20 min-w-0 flex-wrap items-center gap-1.5 overflow-y-auto">
-          {value.map((department) => (
-            <Badge
-              key={department}
-              variant="secondary"
-              className="h-7 max-w-full gap-1 rounded-full px-2"
-            >
-              <span className="max-w-56 truncate">{department}</span>
-              <button
-                type="button"
-                className="rounded-full p-0.5 text-foreground/65 transition-colors hover:bg-background hover:text-foreground"
-                onClick={() => toggle(department)}
-                aria-label={`Убрать ${department}`}
+    <div className="flex min-w-0 flex-col">
+      <Tabs value={activeProfile} onValueChange={setActiveProfile}>
+        <TabsList className="h-8 w-full">
+          {DEPARTMENT_GROUPS.map((group) => {
+            const count = countByProfile.get(group.profile) ?? 0
+            return (
+              <TabsTrigger
+                key={group.profile}
+                value={group.profile}
+                className="gap-0 px-1.5 text-xs"
               >
-                <XIcon className="size-3" />
-              </button>
-            </Badge>
-          ))}
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => window.setTimeout(() => setFocused(false), 120)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && visibleOptions[0]) {
-                event.preventDefault()
-                add(visibleOptions[0])
-              }
-            }}
-            placeholder={value.length ? 'Добавить отделение…' : 'Найти отделение…'}
-            className="h-7 min-w-36 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-foreground/45"
-          />
+                {group.short}
+                <CountBadge count={count} />
+              </TabsTrigger>
+            )
+          })}
+        </TabsList>
+      </Tabs>
+
+      <div ref={outerRef} className="overflow-hidden">
+        <div ref={innerRef} className="pt-2.5">
+          <div
+            key={activeProfile}
+            className="flex flex-wrap gap-1.5 duration-200 ease-out animate-in fade-in-0"
+          >
+            {activeGroup.departments.map((department) => (
+              <DepartmentChip
+                key={department.name}
+                name={department.name}
+                label={departmentShortLabel(department)}
+                selected={selected.has(department.name)}
+                onToggle={() => toggle(department.name)}
+              />
+            ))}
+          </div>
         </div>
       </div>
-
-      {showSuggestions && (
-        <div className="absolute top-full right-0 left-0 z-50 mt-2 max-h-52 overflow-y-auto rounded-2xl bg-popover p-1.5 text-sm shadow-lg ring-1 ring-foreground/10">
-          {visibleOptions.length ? (
-            <div className="grid gap-1">
-              {visibleOptions.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => add(option)}
-                  className="group flex min-h-8 items-center gap-2 rounded-xl px-2.5 py-1.5 text-left transition-colors hover:bg-primary/10"
-                >
-                  <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-input text-primary group-hover:border-primary/40">
-                    <CheckIcon className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{option.value}</span>
-                  <span className="shrink-0 text-xs text-foreground/55">
-                    {option.profile.replace(' профиль', '')}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="px-2 py-3 text-center text-sm text-foreground/60">
-              Ничего не найдено
-            </div>
-          )}
-        </div>
-      )}
     </div>
+  )
+}
+
+function NoteField({
+  value,
+  placeholder,
+  onChange,
+}: {
+  value: string
+  placeholder: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          className="flex h-10 w-full min-w-0 items-center rounded-lg border bg-background px-3 text-left text-sm transition-[color,background-color,border-color,box-shadow] duration-150 ease-out active:translate-y-px hover:border-primary/40 hover:bg-primary/5 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20 focus-visible:outline-none data-[state=open]:border-ring data-[state=open]:ring-3 data-[state=open]:ring-ring/20"
+        >
+          <span
+            className={cn(
+              'line-clamp-1 w-full',
+              value ? 'text-foreground' : 'text-muted-foreground/55',
+            )}
+          >
+            {value || placeholder}
+          </span>
+        </button>
+      </DialogTrigger>
+      <DialogContent
+        aria-describedby={undefined}
+        showCloseButton={false}
+        className="gap-3 rounded-2xl px-4 py-4 sm:max-w-md sm:px-4"
+      >
+        <DialogTitle className="sr-only">{placeholder}</DialogTitle>
+        <Textarea
+          autoFocus
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className="max-h-[60vh] min-h-28 overflow-y-auto rounded-lg border-input bg-background text-sm transition-[height,border-color,box-shadow] duration-150 ease-out"
+        />
+        <DialogClose asChild>
+          <Button className="justify-self-end">Сохранить</Button>
+        </DialogClose>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -201,7 +325,8 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
     mutate(
       {
         uid: appeal.uid,
-        isJustified: justified === 'yes' ? true : justified === 'no' ? false : null,
+        isJustified:
+          justified === 'yes' ? true : justified === 'no' ? false : null,
         notes,
         issues,
         departments,
@@ -220,8 +345,7 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
         size="icon"
         className={cn(
           'size-8 text-foreground/75 transition-[background-color,color,box-shadow] duration-150 hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary',
-          hasAnnotation &&
-            'bg-primary/10 text-primary hover:bg-primary/15',
+          hasAnnotation && 'bg-primary/10 text-primary hover:bg-primary/15',
         )}
         onClick={openEditor}
         aria-label={`Редактировать обращение № ${appeal.id}`}
@@ -231,95 +355,68 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[calc(100svh-2rem)] gap-3.5 overflow-visible rounded-3xl px-5 py-5 sm:max-w-[34rem] sm:px-6">
-          <DialogHeader className="gap-1">
-            <div className="flex min-w-0 items-start justify-between gap-3">
-              <div className="min-w-0">
-                <DialogTitle>Аннотация обращения</DialogTitle>
-                <DialogDescription className="truncate">
-                  № {appeal.id} · {appeal.correspondent}
-                </DialogDescription>
-              </div>
-              {annotationDate && (
-                <div className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-medium whitespace-nowrap">
-                  Изменено {annotationDate}
-                </div>
-              )}
-            </div>
-            <p className="text-xs text-foreground/70">
-              {formatDateShort(appeal.dateIso)}
+        <DialogContent className="max-h-[calc(100svh-2rem)] gap-4 overflow-y-auto rounded-3xl px-5 py-5 sm:max-w-[34rem] sm:px-6">
+          <DialogHeader className="gap-1 pr-8">
+            <DialogTitle className="text-base font-medium">
+              № {appeal.id}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {appeal.correspondent} · {formatDateShort(appeal.dateIso)}
               {appeal.profile ? ` · ${appeal.profile}` : ''}
-            </p>
+              {annotationDate ? ` · изм. ${annotationDate}` : ''}
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="flex min-w-0 flex-col gap-3">
-            <div
-              className="min-w-0 rounded-2xl border bg-muted/45 px-3 py-2 text-sm"
-              title={appeal.content}
+          <div className="flex min-w-0 flex-col gap-4">
+            <p className="min-w-0 border-l-2 border-border pl-3 text-sm text-muted-foreground">
+              {appeal.content}
+            </p>
+
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              spacing={0}
+              value={justified}
+              onValueChange={(v) => v && setJustified(v)}
+              className="w-full"
             >
-              <p className="truncate">
-                {appeal.content}
-              </p>
-            </div>
-
-            <div className="grid items-center gap-2 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
-              <Label className="text-sm">Обоснованность</Label>
-              <ToggleGroup
-                type="single"
-                variant="outline"
-                value={justified}
-                onValueChange={(v) => v && setJustified(v)}
-                className="flex-wrap justify-start gap-1.5"
+              <ToggleGroupItem
+                value="none"
+                className="h-9 flex-1 text-sm data-[state=on]:bg-muted data-[state=on]:text-foreground"
               >
-                <ToggleGroupItem value="none" className="h-8 px-3">
-                  Не задано
-                </ToggleGroupItem>
-                <ToggleGroupItem
-                  value="yes"
-                  className="h-8 px-3 data-[state=on]:border-emerald-500/40 data-[state=on]:bg-emerald-500/10 data-[state=on]:text-emerald-700 dark:data-[state=on]:text-emerald-400"
-                >
-                  Обоснованно
-                </ToggleGroupItem>
-                <ToggleGroupItem
-                  value="no"
-                  className="h-8 px-3 data-[state=on]:border-destructive/40 data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive"
-                >
-                  Не обоснованно
-                </ToggleGroupItem>
-              </ToggleGroup>
-            </div>
+                Не задано
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="yes"
+                className="h-9 flex-1 text-sm hover:bg-destructive/10 hover:text-destructive data-[state=on]:border-destructive/40 data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive"
+              >
+                Обоснованно
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="no"
+                className="h-9 flex-1 text-sm hover:bg-positive/10 hover:text-positive data-[state=on]:border-positive/40 data-[state=on]:bg-positive/10 data-[state=on]:text-positive dark:hover:bg-positive/15 dark:data-[state=on]:bg-positive/15"
+              >
+                Не обоснованно
+              </ToggleGroupItem>
+            </ToggleGroup>
 
-            <DepartmentSelect
-              value={departments}
-              onChange={setDepartments}
-            />
+            <DepartmentSelect value={departments} onChange={setDepartments} />
 
-            <div className="grid min-w-0 gap-3 md:grid-cols-2">
-              <div className="flex min-w-0 flex-col gap-2">
-                <Label htmlFor="appeal-issues">Выявлено и решено</Label>
-                <Textarea
-                  id="appeal-issues"
-                  value={issues}
-                  onChange={(e) => setIssues(e.target.value)}
-                  placeholder="Проблемы и решение…"
-                  className={compactTextareaClass}
-                />
-              </div>
-
-              <div className="flex min-w-0 flex-col gap-2">
-                <Label htmlFor="appeal-notes">Комментарий</Label>
-                <Textarea
-                  id="appeal-notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Комментарий…"
-                  className={compactTextareaClass}
-                />
-              </div>
+            <div className="grid min-w-0 gap-2 md:grid-cols-2">
+              <NoteField
+                value={issues}
+                placeholder="Выявлено и решено…"
+                onChange={setIssues}
+              />
+              <NoteField
+                value={notes}
+                placeholder="Комментарий…"
+                onChange={setNotes}
+              />
             </div>
           </div>
 
-          <DialogFooter className="pt-1">
+          <DialogFooter>
             {hasAnnotation && (
               <Button
                 variant="ghost"

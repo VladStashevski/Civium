@@ -7,8 +7,10 @@ import {
   login,
   patchAppeal,
   uploadExcel,
+  type Appeal,
   type AppealMode,
   type AppealPatch,
+  type AppealsResponse,
 } from '@/lib/api'
 
 export function useSession() {
@@ -60,11 +62,115 @@ function useInvalidateAppeals() {
 }
 
 export function usePatchAppeal() {
-  const invalidate = useInvalidateAppeals()
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: (body: AppealPatch) => patchAppeal(body),
-    onSuccess: invalidate,
+    onMutate: async (body) => {
+      await qc.cancelQueries({ queryKey: ['appeals'] })
+      const snapshots = qc.getQueriesData<AppealsResponse>({
+        queryKey: ['appeals'],
+      })
+
+      qc.setQueriesData<AppealsResponse>(
+        { queryKey: ['appeals'] },
+        (current) => applyOptimisticAppealPatch(current, body),
+      )
+
+      return { snapshots }
+    },
+    onError: (_error, _body, context) => {
+      for (const [queryKey, data] of context?.snapshots ?? []) {
+        qc.setQueryData(queryKey, data)
+      }
+    },
+    onSuccess: ({ item }) => {
+      qc.setQueriesData<AppealsResponse>(
+        { queryKey: ['appeals'] },
+        (current) => replaceAppealInCache(current, item),
+      )
+      qc.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'inactive' })
+      qc.invalidateQueries({ queryKey: ['references'], refetchType: 'inactive' })
+    },
   })
+}
+
+function applyOptimisticAppealPatch(
+  current: AppealsResponse | undefined,
+  patch: AppealPatch,
+): AppealsResponse | undefined {
+  if (!current) return current
+
+  return {
+    ...current,
+    items: current.items.map((item) =>
+      item.uid === patch.uid ? applyManualPatch(item, patch) : item,
+    ),
+  }
+}
+
+function replaceAppealInCache(
+  current: AppealsResponse | undefined,
+  appeal: Appeal,
+): AppealsResponse | undefined {
+  if (!current) return current
+
+  return {
+    ...current,
+    items: current.items.map((item) =>
+      item.uid === appeal.uid ? { ...item, ...appeal } : item,
+    ),
+  }
+}
+
+function applyManualPatch(appeal: Appeal, patch: AppealPatch): Appeal {
+  const now = new Date().toISOString()
+  const manualFields = { ...(appeal.manualFields ?? {}) }
+
+  if (patch.isJustified === null) {
+    delete manualFields.isJustified
+  } else if (patch.isJustified !== undefined) {
+    manualFields.isJustified = patch.isJustified
+  }
+
+  for (const key of ['notes', 'issues'] as const) {
+    if (patch[key] === undefined) continue
+    const value = patch[key]?.trim()
+    if (value) {
+      manualFields[key] = patch[key]
+    } else {
+      delete manualFields[key]
+    }
+  }
+
+  if (patch.departments !== undefined) {
+    const departments = patch.departments
+      .map((department) => department.trim())
+      .filter(Boolean)
+    if (departments.length) {
+      manualFields.departments = departments
+    } else {
+      delete manualFields.departments
+    }
+  }
+
+  const hasAnnotation =
+    manualFields.isJustified !== undefined ||
+    Boolean(manualFields.notes?.trim()) ||
+    Boolean(manualFields.issues?.trim()) ||
+    Boolean(manualFields.departments?.length)
+
+  if (hasAnnotation) {
+    manualFields.annotationCreatedAt =
+      typeof manualFields.annotationCreatedAt === 'string'
+        ? manualFields.annotationCreatedAt
+        : now
+    manualFields.annotationUpdatedAt = now
+  } else {
+    delete manualFields.annotationCreatedAt
+    delete manualFields.annotationUpdatedAt
+  }
+
+  return { ...appeal, manualFields }
 }
 
 export function useUploadExcel() {

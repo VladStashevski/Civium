@@ -409,13 +409,13 @@ const columns: ColumnDef<Appeal>[] = [
       const v = row.original.manualFields?.isJustified
       if (v === true)
         return (
-          <Badge className="border-transparent bg-positive/10 text-positive dark:bg-positive/15">
+          <Badge className="border-transparent bg-destructive/10 text-destructive">
             Обоснованно
           </Badge>
         )
       if (v === false)
         return (
-          <Badge className="border-transparent bg-destructive/10 text-destructive">
+          <Badge className="border-transparent bg-positive/10 text-positive dark:bg-positive/15">
             Не обоснованно
           </Badge>
         )

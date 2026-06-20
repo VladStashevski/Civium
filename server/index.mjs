@@ -55,6 +55,8 @@ const loginWindowMs = 15 * 60 * 1000
 const loginAttemptLimit = 10
 const loginAttempts = new Map()
 let storeMutationQueue = Promise.resolve()
+let storeCache = null
+let storeIndex = createEmptyStoreIndex()
 
 if (
   !adminEmail ||
@@ -283,9 +285,7 @@ app.patch('/api/appeals', async (request, reply) => {
   }
 
   const record = await mutateStore((store) => {
-    const current = store.records.find((item) =>
-      uid ? item.uid === uid : appealKey ? item.appealKey === appealKey : item.id === id
-    )
+    const current = findStoreRecord(store, { uid, id, appealKey })
     if (!current) return null
 
     const now = new Date().toISOString()
@@ -346,6 +346,10 @@ app.patch('/api/appeals', async (request, reply) => {
       manualUpdatedAt: now,
     }
     return current
+  }, {
+    migrateBeforeWrite: false,
+    rebuildReferences: false,
+    pretty: false,
   })
 
   if (!record) {
@@ -480,10 +484,11 @@ async function ensureStore() {
 }
 
 async function readStore() {
+  if (storeCache) return storeCache
   await ensureStore()
   const raw = await fs.readFile(storeFile, 'utf8')
   const parsed = JSON.parse(raw)
-  return migrateAppealsStore(parsed)
+  return setStoreCache(migrateAppealsStore(parsed))
 }
 
 async function migrateStoreFile() {
@@ -492,33 +497,91 @@ async function migrateStoreFile() {
   const migrated = migrateAppealsStore(parsed)
   if (parsed.version !== migrated.version || parsed.schema !== migrated.schema) {
     await writeStore(migrated)
+  } else {
+    setStoreCache(migrated)
   }
 }
 
-async function writeStore(store) {
+async function writeStore(store, options = {}) {
+  const {
+    migrateBeforeWrite = true,
+    rebuildReferences = true,
+    pretty = true,
+  } = options
   await fs.mkdir(dataDir, { recursive: true })
-  const migrated = migrateAppealsStore(store)
+  const migrated = migrateBeforeWrite ? migrateAppealsStore(store) : store
+  if (rebuildReferences) {
+    migrated.references = buildReferenceData(migrated.records)
+  }
   const tempFile = `${storeFile}.${process.pid}.${crypto.randomUUID()}.tmp`
   try {
-    await fs.writeFile(tempFile, `${JSON.stringify(migrated, null, 2)}\n`, 'utf8')
+    const serialized = pretty
+      ? `${JSON.stringify(migrated, null, 2)}\n`
+      : JSON.stringify(migrated)
+    await fs.writeFile(tempFile, serialized, 'utf8')
     await fs.rename(tempFile, storeFile)
+    setStoreCache(migrated)
   } catch (error) {
     await fs.rm(tempFile, { force: true })
     throw error
   }
 }
 
-function mutateStore(mutator) {
+function mutateStore(mutator, writeOptions = {}) {
   const operation = storeMutationQueue.then(async () => {
     const store = await readStore()
     const value = await mutator(store)
+    if (value === null) return null
     const nextStore = value?.nextStore ?? store
     nextStore.updatedAt = new Date().toISOString()
-    await writeStore(nextStore)
+    try {
+      await writeStore(nextStore, writeOptions)
+    } catch (error) {
+      storeCache = null
+      storeIndex = createEmptyStoreIndex()
+      throw error
+    }
     return value?.nextStore ? value.result : value
   })
   storeMutationQueue = operation.catch(() => {})
   return operation
+}
+
+function createEmptyStoreIndex() {
+  return {
+    byUid: new Map(),
+    byId: new Map(),
+    byAppealKey: new Map(),
+  }
+}
+
+function setStoreCache(store) {
+  storeCache = store
+  storeIndex = createStoreIndex(store.records)
+  return storeCache
+}
+
+function createStoreIndex(records = []) {
+  const index = createEmptyStoreIndex()
+  for (const record of records) {
+    if (record.uid) index.byUid.set(record.uid, record)
+    if (record.id) index.byId.set(record.id, record)
+    if (record.appealKey) index.byAppealKey.set(record.appealKey, record)
+  }
+  return index
+}
+
+function findStoreRecord(store, { uid, id, appealKey }) {
+  if (store !== storeCache) {
+    const records = Array.isArray(store?.records) ? store.records : []
+    return records.find((item) =>
+      uid ? item.uid === uid : appealKey ? item.appealKey === appealKey : item.id === id
+    )
+  }
+  if (uid) return storeIndex.byUid.get(uid)
+  if (appealKey) return storeIndex.byAppealKey.get(appealKey)
+  if (id) return storeIndex.byId.get(id)
+  return undefined
 }
 
 function assertUniqueAppealIds(existingRecords, newRecords) {
