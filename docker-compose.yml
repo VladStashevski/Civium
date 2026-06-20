@@ -1,4 +1,18 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
   api:
     build:
       context: .
@@ -23,5 +37,7 @@ services:
     restart: unless-stopped
     depends_on:
       - api
-    ports:
-      - '80:80'
+
+volumes:
+  caddy_data:
+  caddy_config:
