@@ -2,6 +2,7 @@ import { useLocation } from '@tanstack/react-router'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { UploadExcelButton } from '@/components/upload-excel-button'
+import { UploadPosExcelButton } from '@/components/pos-upload-excel-button'
 import { PrintSlidesButton } from '@/components/print-slides-button'
 
 const TITLES: Record<string, string> = {
@@ -9,6 +10,8 @@ const TITLES: Record<string, string> = {
   '/appeals': 'Все обращения',
   '/references': 'Справочники',
   '/slides': 'Слайды',
+  '/pos': 'Дашборд ПОС',
+  '/pos-table': 'Сообщения ПОС',
 }
 
 export function SiteHeader() {
@@ -27,6 +30,11 @@ export function SiteHeader() {
         {pathname === '/appeals' && (
           <div className="ml-auto">
             <UploadExcelButton />
+          </div>
+        )}
+        {pathname === '/pos-table' && (
+          <div className="ml-auto">
+            <UploadPosExcelButton />
           </div>
         )}
         {pathname === '/slides' && (

@@ -5,11 +5,14 @@ import {
   normalizeManualRecord,
 } from '../scripts/complaints-parser.mjs'
 import {
+  buildReferenceData,
   mergeExcelRowsIntoStore,
   migrateAppealsStore,
   normalizeAppealExcelRows,
   readAppealExcelRows,
 } from '../scripts/appeals-store.mjs'
+import { normalizePosRecords } from '../scripts/pos-parser.mjs'
+import { mergePosRecords } from '../scripts/pos-store.mjs'
 import XLSX from 'xlsx'
 
 test('manual records receive unique generated identifiers', () => {
@@ -112,6 +115,48 @@ test('dashboard compares current and previous years through the same date', () =
     dashboard.byMonth.find((row) => row.month === '06').previousCount,
     1
   )
+})
+
+test('references include all department profiles and departments with zero counts', () => {
+  const references = buildReferenceData([])
+
+  assert.equal(references.profiles.length, 5)
+  assert.equal(references.departments.length, 35)
+  assert.deepEqual(
+    references.profiles.map((profile) => [profile.name, profile.count]),
+    [
+      ['Хирургический профиль', 0],
+      ['Терапевтический профиль', 0],
+      ['Онкологический профиль', 0],
+      ['Инфекционный профиль', 0],
+      ['Поликлинический профиль', 0],
+    ],
+  )
+  assert.ok(
+    references.departments.some(
+      (department) =>
+        department.name === 'Неврологическое отделение' &&
+        department.profile === 'Терапевтический профиль' &&
+        department.count === 0,
+    ),
+  )
+})
+
+test('references count department profiles by current-year months', () => {
+  const references = buildReferenceData([
+    {
+      ...makeRecord('2026-1'),
+      dateIso: '2026-03-05',
+      year: 2026,
+      departments: ['Неврологическое отделение'],
+    },
+  ])
+  const profile = references.profiles.find(
+    (item) => item.name === 'Терапевтический профиль',
+  )
+
+  assert.equal(profile.years[2026], 1)
+  assert.equal(profile.months[2026]['03'], 1)
 })
 
 test('store migration removes synthetic appeal status', () => {
@@ -319,6 +364,124 @@ test('appeal import handles PrintResult-style duplicated headers', () => {
   assert.deepEqual(records[0].departments, ['Неврологическое отделение'])
 })
 
+test('pos import recognizes feedback platform export headers', () => {
+  const rows = readRowsFromWorkbook([
+    [
+      'Номер',
+      'Номер ЕПГУ',
+      'Источник',
+      'Верхнеуровневый ЛКО',
+      'Категория',
+      'Подкатегория',
+      'Факт',
+      'Организация, в которую поступило сообщение',
+      'Организация, в которой находится сообщение',
+      'Дата поступления',
+      'Дата планируемого завершения работ',
+      'Дата фактического завершения работ',
+      'Стадия',
+      'Статус',
+      'Просрочено',
+      'Фаст-трек',
+      'ФЗ',
+      'Заявитель выбрал подачу по 59-ФЗ',
+      'Тип решения',
+      'Направлено по email в ФОИВ, не подключенный к ПОС',
+      'Оценка ответа заявителем',
+      'Повторное рассмотрение',
+      'ФИО координатора',
+      'ФИО исполнителя',
+      'ФИО руководителя',
+    ],
+    [
+      '327441806',
+      '6668478383',
+      'MED_DOC_EPGU',
+      'Ханты-Мансийский автономный округ - Югра',
+      'Медицина',
+      'Медицинская карта',
+      'Медицинская карта',
+      'Ханты-Мансийский автономный округ - Югра',
+      'БУ "СУРГУТСКАЯ ОКРУЖНАЯ КЛИНИЧЕСКАЯ БОЛЬНИЦА"',
+      '06.01.2026',
+      '16.01.2026',
+      '07.01.2026',
+      'Завершено',
+      'Отправлен ответ заявителю',
+      'Нет',
+      'Да',
+      'Обычное сообщение',
+      'Нет',
+      'Решено',
+      '-',
+      '5',
+      '-',
+      'Координатор',
+      'Исполнитель',
+      'Руководитель',
+    ],
+  ])
+
+  const records = normalizePosRecords(rows, {
+    sourceFile: 'pos.xlsx',
+    importId: 'pos-import',
+  })
+
+  assert.equal(records.length, 1)
+  assert.equal(records[0].uid, '327441806')
+  assert.equal(records[0].dateIso, '2026-01-06')
+  assert.equal(records[0].plannedIso, '2026-01-16')
+  assert.equal(records[0].completedIso, '2026-01-07')
+  assert.equal(records[0].rating, 5)
+})
+
+test('pos reimport replaces snapshot and preserves manual fields', () => {
+  const first = mergePosRecords(
+    { records: [], imports: [] },
+    [
+      makePosRecord('100', '2026-01-01'),
+      makePosRecord('200', '2026-01-02'),
+    ],
+    { importId: 'pos-1', sourceFile: 'first.xlsx' },
+  )
+  first.store.records.find((record) => record.uid === '100').manualFields = {
+    isJustified: true,
+    issues: 'Задержка ответа',
+    notes: 'Проверено',
+    departments: ['Неврологическое отделение'],
+  }
+
+  const second = mergePosRecords(
+    first.store,
+    [
+      makePosRecord('100', '2026-02-01'),
+      makePosRecord('300', '2026-02-03'),
+    ],
+    { importId: 'pos-2', sourceFile: 'second.xlsx' },
+  )
+
+  assert.equal(second.addedCount, 1)
+  assert.equal(second.updatedCount, 1)
+  assert.equal(second.removedCount, 1)
+  assert.equal(second.preservedManualFieldsCount, 1)
+  assert.deepEqual(
+    second.store.records.map((record) => record.uid).sort(),
+    ['100', '300'],
+  )
+  assert.equal(
+    second.store.records.find((record) => record.uid === '100').manualFields.notes,
+    'Проверено',
+  )
+  assert.equal(
+    second.store.records.find((record) => record.uid === '100').manualFields.isJustified,
+    true,
+  )
+  assert.deepEqual(
+    second.store.records.find((record) => record.uid === '100').manualFields.departments,
+    ['Неврологическое отделение'],
+  )
+})
+
 function makeRecord(id, isJustified) {
   return {
     uid: `excel:2025:${id}`,
@@ -343,5 +506,27 @@ function makeExcelRow(id, delivery, content) {
     'Корр./Подписал': 'Иванов Иван - Сургут',
     'Вид доставки РК': delivery,
     'Группа документов - индекс': '07/19-ОГ',
+  }
+}
+
+function readRowsFromWorkbook(rows) {
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Sheet1')
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+  return XLSX.utils.sheet_to_json(
+    XLSX.read(buffer, { type: 'buffer' }).Sheets.Sheet1,
+    { raw: false, defval: '' },
+  )
+}
+
+function makePosRecord(uid, dateIso) {
+  return {
+    uid,
+    number: uid,
+    dateIso,
+    year: Number(dateIso.slice(0, 4)),
+    month: Number(dateIso.slice(5, 7)),
+    origin: 'excel',
+    manualFields: {},
   }
 }

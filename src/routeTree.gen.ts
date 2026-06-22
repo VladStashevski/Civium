@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SlidesRouteImport } from './routes/slides'
 import { Route as ReferencesRouteImport } from './routes/references'
+import { Route as PosTableRouteImport } from './routes/pos-table'
+import { Route as PosRouteImport } from './routes/pos'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppealsRouteImport } from './routes/appeals'
 import { Route as IndexRouteImport } from './routes/index'
@@ -23,6 +25,16 @@ const SlidesRoute = SlidesRouteImport.update({
 const ReferencesRoute = ReferencesRouteImport.update({
   id: '/references',
   path: '/references',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PosTableRoute = PosTableRouteImport.update({
+  id: '/pos-table',
+  path: '/pos-table',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PosRoute = PosRouteImport.update({
+  id: '/pos',
+  path: '/pos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -45,6 +57,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/appeals': typeof AppealsRoute
   '/login': typeof LoginRoute
+  '/pos': typeof PosRoute
+  '/pos-table': typeof PosTableRoute
   '/references': typeof ReferencesRoute
   '/slides': typeof SlidesRoute
 }
@@ -52,6 +66,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/appeals': typeof AppealsRoute
   '/login': typeof LoginRoute
+  '/pos': typeof PosRoute
+  '/pos-table': typeof PosTableRoute
   '/references': typeof ReferencesRoute
   '/slides': typeof SlidesRoute
 }
@@ -60,21 +76,47 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/appeals': typeof AppealsRoute
   '/login': typeof LoginRoute
+  '/pos': typeof PosRoute
+  '/pos-table': typeof PosTableRoute
   '/references': typeof ReferencesRoute
   '/slides': typeof SlidesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/appeals' | '/login' | '/references' | '/slides'
+  fullPaths:
+    | '/'
+    | '/appeals'
+    | '/login'
+    | '/pos'
+    | '/pos-table'
+    | '/references'
+    | '/slides'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/appeals' | '/login' | '/references' | '/slides'
-  id: '__root__' | '/' | '/appeals' | '/login' | '/references' | '/slides'
+  to:
+    | '/'
+    | '/appeals'
+    | '/login'
+    | '/pos'
+    | '/pos-table'
+    | '/references'
+    | '/slides'
+  id:
+    | '__root__'
+    | '/'
+    | '/appeals'
+    | '/login'
+    | '/pos'
+    | '/pos-table'
+    | '/references'
+    | '/slides'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppealsRoute: typeof AppealsRoute
   LoginRoute: typeof LoginRoute
+  PosRoute: typeof PosRoute
+  PosTableRoute: typeof PosTableRoute
   ReferencesRoute: typeof ReferencesRoute
   SlidesRoute: typeof SlidesRoute
 }
@@ -93,6 +135,20 @@ declare module '@tanstack/react-router' {
       path: '/references'
       fullPath: '/references'
       preLoaderRoute: typeof ReferencesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pos-table': {
+      id: '/pos-table'
+      path: '/pos-table'
+      fullPath: '/pos-table'
+      preLoaderRoute: typeof PosTableRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pos': {
+      id: '/pos'
+      path: '/pos'
+      fullPath: '/pos'
+      preLoaderRoute: typeof PosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -123,6 +179,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppealsRoute: AppealsRoute,
   LoginRoute: LoginRoute,
+  PosRoute: PosRoute,
+  PosTableRoute: PosTableRoute,
   ReferencesRoute: ReferencesRoute,
   SlidesRoute: SlidesRoute,
 }

@@ -14,6 +14,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
 import { useSession } from '@/hooks/use-appeals'
+import { usePersistentState } from '@/hooks/use-persistent-state'
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { data, isPending } = useSession()
@@ -39,8 +40,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 function Shell() {
+  // Свёрнут/раскрыт левый сайдбар — помним между сессиями (shadcn-провайдер пишет
+  // cookie, но в этом SPA её никто не читает обратно, поэтому держим в localStorage).
+  const [sidebarOpen, setSidebarOpen] = usePersistentState('sidebar:open', true)
+
   return (
     <SidebarProvider
+      open={sidebarOpen}
+      onOpenChange={setSidebarOpen}
       style={
         {
           '--sidebar-width': 'calc(var(--spacing) * 72)',

@@ -9,9 +9,15 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { useAppeals } from '@/hooks/use-appeals'
+import { useAppeals, useReferences } from '@/hooks/use-appeals'
 import { isGratitudeAppeal } from '@/lib/appeals-data'
-import type { Appeal, AppealMode } from '@/lib/api'
+import type { Appeal, AppealMode, Theme } from '@/lib/api'
+import {
+  DEPARTMENT_BY_NAME,
+  DEPARTMENT_GROUPS,
+  DEPARTMENT_OPTIONS,
+  resolveDepartmentName,
+} from '@/lib/departments'
 import { cn } from '@/lib/utils'
 
 const MONTHS_SHORT = [
@@ -38,6 +44,23 @@ const deltaClass = (d: number) =>
 
 type RankRow = { name: string; prev: number; cur: number }
 type MonthRow = { name: string; prev: number; cur: number }
+type ThemeColumn = { name: string; label: string; title: string }
+type DepartmentSlideRow = RankRow & {
+  deltaPercent: number | null
+  themes: Record<string, { prev: number; cur: number }>
+}
+
+const THEME_SHORT_LABELS: Record<string, string> = {
+  A: 'Кач.',
+  B: 'Орг.',
+  C: 'Кадры',
+  D: 'Лек.',
+  E: 'Эксп.',
+  F: 'Станд.',
+  G: 'ОМС',
+  H: 'Благ.',
+  I: 'Дело',
+}
 
 function rankRows(prev: Appeal[], cur: Appeal[], getKeys: (a: Appeal) => string[]): RankRow[] {
   const tally = (arr: Appeal[]) => {
@@ -52,52 +75,82 @@ function rankRows(prev: Appeal[], cur: Appeal[], getKeys: (a: Appeal) => string[
     .sort((a, b) => b.cur - a.cur || b.prev - a.prev)
 }
 
-// профили-категории для матрицы отделений
-const PROFILE_COLUMNS = [
-  { key: 'quality', short: 'Кач.', match: /качеств/i },
-  { key: 'organization', short: 'Орг.', match: /организ/i },
-  { key: 'ethics', short: 'Этика', match: /этик/i },
-  { key: 'meds', short: 'Лек.', match: /лекарств/i },
-] as const
-
-const PROFILE_GROUPS = [
-  { key: 'surgery', label: 'Хирургический профиль', color: '#1d4ed8' },
-  { key: 'oncology', label: 'Онкологический профиль', color: '#b91c1c' },
-  { key: 'infection', label: 'Инфекционный профиль', color: '#047857' },
-  { key: 'therapy', label: 'Терапевтический профиль', color: '#b45309' },
-  { key: 'kdp', label: 'КДП', color: '#7c3aed' },
-  { key: 'other', label: 'Прочее', color: '#525252' },
-] as const
-
-const DEPARTMENT_TO_GROUP: Record<string, string> = {
-  'хирургическое отделение №1': 'surgery',
-  'хирургическое отделение №2': 'surgery',
-  'хирургическое приёмное отделение': 'surgery',
-  'урологическое отделение': 'surgery',
-  'отделение челюстно-лицевой хирургии': 'surgery',
-  'лор-отделение': 'surgery',
-  'отделение сосудистой хирургии': 'surgery',
-  'проктологическое отделение': 'surgery',
-  'офтальмологическое отделение': 'surgery',
-  'онкологическое отделение': 'oncology',
-  'инфекционное отделение №1': 'infection',
-  'инфекционное отделение №5': 'infection',
-  'инфекционное приёмное отделение': 'infection',
-  'отделение реанимации и анестезиологии №3': 'infection',
-  'отделение скорой медицинской помощи': 'therapy',
-  'неврологическое отделение': 'therapy',
-  'пульмонологическое отделение': 'therapy',
-  'ревматологическое отделение': 'therapy',
-  'гастроэнтерологическое отделение': 'therapy',
-  'эндокринологическое отделение': 'therapy',
-  'нефрологическое отделение': 'therapy',
-  'гематологическое отделение': 'therapy',
-  'отделение реанимации и анестезиологии №1': 'therapy',
-  'отделение реанимации и анестезиологии №2': 'therapy',
-  'сурдологическое отделение': 'kdp',
-  'центр аллергологии и иммунологии': 'kdp',
+function officialDepartments(appeal: Appeal): string[] {
+  return effDepartments(appeal)
+    .map(resolveDepartmentName)
+    .filter((department) => DEPARTMENT_BY_NAME.has(department))
 }
-const groupKeyOf = (d: string) => DEPARTMENT_TO_GROUP[d.trim().toLowerCase()] ?? 'other'
+
+function departmentProfiles(appeal: Appeal): string[] {
+  return [
+    ...new Set(
+      officialDepartments(appeal)
+        .map((department) => DEPARTMENT_BY_NAME.get(department)?.profile)
+        .filter((profile): profile is string => Boolean(profile)),
+    ),
+  ]
+}
+
+function countOfficialRows(
+  prev: Appeal[],
+  cur: Appeal[],
+  allNames: string[],
+  getKeys: (appeal: Appeal) => string[],
+  themeColumns: ThemeColumn[] = [],
+): DepartmentSlideRow[] {
+  const emptyThemes = () =>
+    Object.fromEntries(
+      themeColumns.map((theme) => [theme.name, { prev: 0, cur: 0 }]),
+    )
+  const rows = new Map<string, DepartmentSlideRow>(
+    allNames.map((name) => [
+      name,
+      {
+        name,
+        prev: 0,
+        cur: 0,
+        deltaPercent: 0,
+        themes: emptyThemes(),
+      },
+    ]),
+  )
+  const themeNames = new Set(themeColumns.map((theme) => theme.name))
+  const add = (records: Appeal[], side: 'prev' | 'cur') => {
+    for (const record of records) {
+      const theme = record.rubricTheme ?? ''
+      for (const key of new Set(getKeys(record))) {
+        if (!key) continue
+        const row = rows.get(key)
+        if (!row) continue
+        row[side] += 1
+        if (themeNames.has(theme)) row.themes[theme][side] += 1
+      }
+    }
+  }
+  add(prev, 'prev')
+  add(cur, 'cur')
+
+  return [...rows.values()].map((row) => {
+    row.deltaPercent = pctValue(row.prev, row.cur)
+    return row
+  })
+}
+
+function themeColumnsFromReferences(themes: Theme[]): ThemeColumn[] {
+  return themes.map((theme, index) => ({
+    name: theme.name,
+    label: THEME_SHORT_LABELS[theme.code ?? ''] ?? String(index + 1),
+    title: theme.name,
+  }))
+}
+
+const DEPARTMENT_PROFILE_COLORS = [
+  '#1d4ed8',
+  '#047857',
+  '#7c3aed',
+  '#dc2626',
+  '#b45309',
+] as const
 
 // ---------- building blocks ----------
 
@@ -372,6 +425,7 @@ function ProfileCard({
 
 export function SlidesView({ mode }: { mode: AppealMode }) {
   const { data, isPending } = useAppeals(mode)
+  const { data: references, isPending: referencesPending } = useReferences(mode)
   const isMobile = useIsMobile()
   const items = React.useMemo(() => data?.items ?? [], [data])
 
@@ -381,9 +435,13 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
     return [...set].sort((a, b) => Number(b) - Number(a))
   }, [items])
 
+  const themeColumns = React.useMemo(
+    () => themeColumnsFromReferences(references?.themes ?? []),
+    [references],
+  )
   const themeOptions = React.useMemo(
-    () => [...new Set(items.map((it) => it.rubricTheme).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'ru')),
-    [items],
+    () => themeColumns.map((theme) => theme.name),
+    [themeColumns],
   )
 
   const [selectedCurYear, setCurYear] = React.useState('')
@@ -394,7 +452,7 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
   const prevYear =
     selectedPrevYear || yearOptions[1] || (curYear ? String(Number(curYear) - 1) : '')
 
-  if (isPending) {
+  if (isPending || referencesPending) {
     return (
       <div className="px-4 lg:px-6">
         <Skeleton className="mx-auto aspect-video w-full max-w-7xl rounded-xl" />
@@ -421,12 +479,14 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
 
   const prevAll = items.filter((it) => yearOf(it) === prevYear && inWindow(it))
   const curAll = items.filter((it) => yearOf(it) === curYear && inWindow(it))
-  const aPrevItems = prevAll.filter((it) => !isGratitude(it) && !isDiscontinued(it))
-  const aCurItems = curAll.filter((it) => !isGratitude(it) && !isDiscontinued(it))
+  const refPrevItems = prevAll.filter((it) => !isGratitude(it))
+  const refCurItems = curAll.filter((it) => !isGratitude(it))
+  const aPrevItems = refPrevItems.filter((it) => !isDiscontinued(it))
+  const aCurItems = refCurItems.filter((it) => !isDiscontinued(it))
 
-  // глубокий анализ (слайды 3–4) — с фильтром по темам
-  const deepPrev = aPrevItems.filter(inThemes)
-  const deepCur = aCurItems.filter(inThemes)
+  // глубокий анализ (слайды 3–4) — с тем же составом, что справочники, плюс фильтр по темам
+  const deepPrev = refPrevItems.filter(inThemes)
+  const deepCur = refCurItems.filter(inThemes)
 
   const monthly: MonthRow[] = MONTHS_SHORT.map((name, i) => {
     const mm = String(i + 1).padStart(2, '0')
@@ -441,14 +501,25 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
     return { name, prev: c(deepPrev), cur: c(deepCur) }
   }).slice(0, monthsLimit)
 
-  const sources = rankRows(prevAll, curAll, (appeal) => [
+  const sources = rankRows(refPrevItems, refCurItems, (appeal) => [
     mode === 'chiefDoctor'
       ? appeal.sourceChannel || 'Источник не определён'
       : appeal.sourceOrganization || 'Источник не определён',
   ])
-  const topics = rankRows(aPrevItems, aCurItems, (a) => [a.rubricTheme || 'Без тематики'])
-  const profiles = rankRows(deepPrev, deepCur, (a) => [a.profile || '—']).slice(0, 4)
-  const profileMax = Math.max(...profiles.flatMap((p) => [p.prev, p.cur]), 1)
+  const topics = countOfficialRows(
+    refPrevItems,
+    refCurItems,
+    themeOptions,
+    (a) => [a.rubricTheme || ''],
+  )
+  const deepTopics = countOfficialRows(
+    deepPrev,
+    deepCur,
+    themeOptions,
+    (a) => [a.rubricTheme || ''],
+  )
+  const rubrics = rankRows(deepPrev, deepCur, (a) => [a.profile || '—']).slice(0, 4)
+  const rubricMax = Math.max(...rubrics.flatMap((p) => [p.prev, p.cur]), 1)
 
   const just = (arr: Appeal[]) => ({
     yes: arr.filter((it) => it.manualFields?.isJustified === true).length,
@@ -457,50 +528,43 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
   const jPrev = just(deepPrev)
   const jCur = just(deepCur)
 
-  // отделения по профилям
-  type DeptRow = {
-    dept: string
-    prev: number
-    cur: number
-    cats: Record<string, { prev: number; cur: number }>
-    jp: number
-    jc: number
-  }
-  const deptAgg = new Map<string, DeptRow>()
-  const ensure = (d: string) => {
-    if (!deptAgg.has(d))
-      deptAgg.set(d, {
-        dept: d,
-        prev: 0,
-        cur: 0,
-        cats: Object.fromEntries(PROFILE_COLUMNS.map((c) => [c.key, { prev: 0, cur: 0 }])),
-        jp: 0,
-        jc: 0,
-      })
-    return deptAgg.get(d)!
-  }
-  const addDept = (arr: Appeal[], side: 'prev' | 'cur') => {
-    for (const it of arr)
-      for (const d of effDepartments(it)) {
-        if (!d) continue
-        const a = ensure(d)
-        a[side]++
-        for (const col of PROFILE_COLUMNS) if (col.match.test(it.profile ?? '')) a.cats[col.key][side]++
-        if (it.manualFields?.isJustified === true) a[side === 'prev' ? 'jp' : 'jc']++
-      }
-  }
-  addDept(deepPrev, 'prev')
-  addDept(deepCur, 'cur')
-  const deptsByGroup = new Map<string, DeptRow[]>()
-  for (const d of [...deptAgg.values()].sort((a, b) => b.cur - a.cur || b.prev - a.prev)) {
-    const g = groupKeyOf(d.dept)
-    if (!deptsByGroup.has(g)) deptsByGroup.set(g, [])
-    deptsByGroup.get(g)!.push(d)
-  }
-  const deptSections = PROFILE_GROUPS.filter((g) => (deptsByGroup.get(g.key)?.length ?? 0) > 0).map((g) => ({
-    palette: g,
-    rows: deptsByGroup.get(g.key)!,
+  const departmentProfileRows = countOfficialRows(
+    deepPrev,
+    deepCur,
+    DEPARTMENT_GROUPS.map((group) => group.profile),
+    departmentProfiles,
+    themeColumns,
+  )
+  const departmentProfileRowByName = new Map(
+    departmentProfileRows.map((row) => [row.name, row] as const),
+  )
+  const departmentRows = countOfficialRows(
+    deepPrev,
+    deepCur,
+    DEPARTMENT_OPTIONS.map((department) => department.value),
+    officialDepartments,
+    themeColumns,
+  )
+  const departmentRowByName = new Map(
+    departmentRows.map((row) => [row.name, row] as const),
+  )
+  const departmentSections = DEPARTMENT_GROUPS.map((group, index) => ({
+    profile: group.profile,
+    color: DEPARTMENT_PROFILE_COLORS[index % DEPARTMENT_PROFILE_COLORS.length],
+    total: departmentProfileRowByName.get(group.profile) ?? {
+      name: group.profile,
+      prev: 0,
+      cur: 0,
+      deltaPercent: 0,
+      themes: Object.fromEntries(
+        themeColumns.map((theme) => [theme.name, { prev: 0, cur: 0 }]),
+      ),
+    },
+    rows: group.departments
+      .map((department) => departmentRowByName.get(department.name))
+      .filter((row): row is DepartmentSlideRow => Boolean(row)),
   }))
+  const departmentGridTemplate = `minmax(0,1fr) 2rem 2rem 3.6rem repeat(${themeColumns.length}, 2.4rem)`
 
   const yearSelect = (value: string, onChange: (v: string) => void) => (
     <Select value={value} onValueChange={onChange}>
@@ -538,32 +602,35 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
               : ''}
           </Button>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-sm text-muted-foreground">Тематика для углублённого анализа:</span>
-          <Button
-            size="sm"
-            variant={themes.length === 0 ? 'secondary' : 'outline'}
-            className="h-7 rounded-full"
-            onClick={() => setThemes([])}
-          >
-            Вся тематика
-          </Button>
-          {themeOptions.map((t) => {
-            const active = themes.includes(t)
+        <div className="grid gap-2">
+          <span className="text-sm text-muted-foreground">Тематики для слайдов:</span>
+          <div className="grid grid-cols-3 gap-1.5 md:grid-cols-9">
+          {themeColumns.map((theme) => {
+            const active = themes.length === 0 || themes.includes(theme.name)
             return (
               <Button
-                key={t}
+                key={theme.name}
                 size="sm"
                 variant={active ? 'secondary' : 'outline'}
-                className="h-7 rounded-full"
+                className="h-7 rounded-full px-2 text-xs"
+                title={theme.title}
                 onClick={() =>
-                  setThemes((prev) => (active ? prev.filter((x) => x !== t) : [...prev, t]))
+                  setThemes((prev) => {
+                    const current = prev.length ? prev : themeOptions
+                    const next = current.includes(theme.name)
+                      ? current.filter((item) => item !== theme.name)
+                      : [...current, theme.name]
+                    return next.length === themeOptions.length || next.length === 0
+                      ? []
+                      : next
+                  })
                 }
               >
-                {t}
+                {theme.label}
               </Button>
             )
           })}
+          </div>
         </div>
       </div>
 
@@ -675,80 +742,146 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
               </table>
             </div>
           </div>
-          <div className="flex flex-col">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-bold">Профили обращений</span>
-              <Legend prevYear={prevYear} curYear={curYear} />
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="flex flex-col">
+              <span className="mb-2 text-sm font-bold">Тематики справочника</span>
+              <RankTable
+                rows={deepTopics}
+                prevYear={prevYear}
+                curYear={curYear}
+                nameHeader="Тематика"
+              />
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {profiles.map((p) => (
-                <ProfileCard key={p.name} row={p} max={profileMax} prevYear={prevYear} curYear={curYear} />
-              ))}
+            <div className="flex flex-col">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-sm font-bold">Рубрики обращений</span>
+                <Legend prevYear={prevYear} curYear={curYear} />
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {rubrics.map((p) => (
+                  <ProfileCard key={p.name} row={p} max={rubricMax} prevYear={prevYear} curYear={curYear} />
+                ))}
+              </div>
             </div>
           </div>
         </Slide>
 
         {/* СЛАЙД 4 */}
-        <Slide n={4} title={`Жалобы по отделениям: ${periodLabel}`}>
-          {deptSections.length ? (
-            <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
-              {deptSections.map((section) => (
-                <div key={section.palette.key} className="flex flex-col gap-1.5">
+        <Slide n={4} title={`Отделения и профили: ${periodLabel}`}>
+          <div className="grid grid-cols-1 gap-4">
+              {departmentSections.map((section) => (
+                <div key={section.profile} className="flex flex-col gap-1.5">
                   <div
                     className="border-b-2 pb-1 text-[12px] font-bold tracking-wide uppercase"
-                    style={{ color: section.palette.color, borderColor: section.palette.color }}
+                    style={{ color: section.color, borderColor: section.color }}
                   >
-                    {section.palette.label}
+                    {section.profile}
                   </div>
-                  <div className="overflow-x-auto print:overflow-visible">
-                  <div className="flex min-w-[30rem] flex-col gap-1.5 print:min-w-0">
-                  <div className="grid grid-cols-[minmax(0,1fr)_2rem_2rem_3rem_repeat(4,2.2rem)_2.6rem] items-center gap-1 px-1 text-[9px] font-bold text-muted-foreground uppercase">
+                  <div
+                    className="grid items-center gap-1 px-1 text-[9px] font-bold text-muted-foreground uppercase"
+                    style={{ gridTemplateColumns: departmentGridTemplate }}
+                  >
                     <span>Отделение</span>
                     <span className="text-center">{prevYear}</span>
                     <span className="text-center">{curYear}</span>
                     <span className="text-center">Δ%</span>
-                    {PROFILE_COLUMNS.map((c) => (
-                      <span key={c.key} className="text-center normal-case">{c.short}</span>
+                    {themeColumns.map((theme) => (
+                      <span
+                        key={theme.name}
+                        className="text-center normal-case"
+                        title={theme.title}
+                      >
+                        {theme.label}
+                      </span>
                     ))}
-                    <span className="text-center">Обосн.</span>
                   </div>
-                  {section.rows.map((d) => {
-                    const pct = pctValue(d.prev, d.cur)
-                    const up = d.cur > d.prev
-                    return (
-                      <div key={d.dept} className="grid grid-cols-[minmax(0,1fr)_2rem_2rem_3rem_repeat(4,2.2rem)_2.6rem] items-center gap-1">
-                        <span className="truncate text-[11px] font-semibold" title={d.dept}>{d.dept}</span>
-                        <span className="text-center text-xs tabular-nums text-muted-foreground">{d.prev}</span>
-                        <span className="text-center text-sm font-bold tabular-nums">{d.cur}</span>
-                        <span className={cn('text-center text-[10px] font-bold tabular-nums', up ? 'text-destructive' : 'text-emerald-600')}>
-                          {pct === null ? '—' : pctText(pct)}
+                  <div
+                    className="grid items-center gap-1 rounded-md bg-muted/55 px-1.5 py-1"
+                    style={{ gridTemplateColumns: departmentGridTemplate }}
+                  >
+                    <span className="truncate text-[11px] font-extrabold uppercase">
+                      Общий
+                    </span>
+                    <span className="text-center text-xs font-bold tabular-nums text-muted-foreground">
+                      {section.total.prev}
+                    </span>
+                    <span className="text-center text-sm font-extrabold tabular-nums">
+                      {section.total.cur}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-center text-[10px] font-extrabold tabular-nums',
+                        section.total.cur > section.total.prev
+                          ? 'text-destructive'
+                          : 'text-emerald-600',
+                        section.total.cur === section.total.prev &&
+                          'text-muted-foreground',
+                      )}
+                    >
+                      {pctText(section.total.deltaPercent)}
+                    </span>
+                    {themeColumns.map((theme) => {
+                      const cell = section.total.themes[theme.name]
+                      const has = cell.prev || cell.cur
+                      return (
+                        <span
+                          key={theme.name}
+                          className="text-center text-[10px] leading-tight font-bold tabular-nums"
+                          title={theme.title}
+                        >
+                          {has ? `${cell.prev}-${cell.cur}` : <span className="text-muted-foreground/40">-</span>}
                         </span>
-                        {PROFILE_COLUMNS.map((c) => {
-                          const cell = d.cats[c.key]
-                          const has = cell.prev || cell.cur
-                          return (
-                            <span key={c.key} className="text-center text-[10px] leading-tight tabular-nums">
-                              {has ? `${cell.prev}-${cell.cur}` : <span className="text-muted-foreground/40">−</span>}
-                            </span>
-                          )
-                        })}
-                        <span className="text-center text-[10px] leading-tight tabular-nums text-destructive">
-                          {d.jp || d.jc ? `${d.jp}-${d.jc}` : <span className="text-muted-foreground/40">−</span>}
-                        </span>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
                   </div>
-                  </div>
+                  {section.rows.map((row) => (
+                    <div
+                      key={row.name}
+                      className="grid items-center gap-1"
+                      style={{ gridTemplateColumns: departmentGridTemplate }}
+                    >
+                      <span
+                        className={cn(
+                          'truncate text-[11px] font-semibold',
+                          !row.prev && !row.cur && 'text-muted-foreground',
+                        )}
+                        title={row.name}
+                      >
+                        {row.name}
+                      </span>
+                      <span className="text-center text-xs tabular-nums text-muted-foreground">
+                        {row.prev}
+                      </span>
+                      <span className="text-center text-sm font-bold tabular-nums">
+                        {row.cur}
+                      </span>
+                      <span
+                        className={cn(
+                          'text-center text-[10px] font-bold tabular-nums',
+                          row.cur > row.prev ? 'text-destructive' : 'text-emerald-600',
+                          row.cur === row.prev && 'text-muted-foreground',
+                        )}
+                      >
+                        {pctText(row.deltaPercent)}
+                      </span>
+                      {themeColumns.map((theme) => {
+                        const cell = row.themes[theme.name]
+                        const has = cell.prev || cell.cur
+                        return (
+                          <span
+                            key={theme.name}
+                            className="text-center text-[10px] leading-tight tabular-nums"
+                            title={theme.title}
+                          >
+                            {has ? `${cell.prev}-${cell.cur}` : <span className="text-muted-foreground/40">-</span>}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  ))}
                 </div>
               ))}
-            </div>
-          ) : (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              Отделения не указаны для выбранных тем. Они берутся из аннотаций
-              обращений и автоопределения по тексту.
-            </div>
-          )}
+          </div>
         </Slide>
       </div>
     </div>

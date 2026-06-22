@@ -23,10 +23,11 @@ import {
   DEPARTMENT_BY_NAME,
   DEPARTMENT_GROUPS,
   departmentShortLabel,
+  resolveDepartmentName,
 } from '@/lib/departments'
 import { cn } from '@/lib/utils'
 
-function justifiedToValue(v: boolean | undefined): string {
+export function justifiedToValue(v: boolean | undefined): string {
   return v === true ? 'yes' : v === false ? 'no' : 'none'
 }
 
@@ -41,31 +42,32 @@ function formatAnnotationDate(value: unknown) {
   }).format(date)
 }
 
-// Смена цифры: старая убирается мгновенно, новая появляется сразу на ПОЛНОЙ
-// непрозрачности и лишь чуть подрастает по масштабу (zoom, без fade). Нет ни
-// пустого кадра, ни наложения двух цифр (ghosting давал «мигание»), ни клиппинга
-// (масштаб). На появлении бейджа цифра статична — за появление отвечает
-// прозрачность самой обёртки, иначе анимации перемножаются и цифра мигает.
+// Смена цифры = направленный «прокат»: новое число въезжает снизу при росте и
+// сверху при убыли (slide + лёгкий fade), пружинным таймингом. По-прежнему в
+// кадре ОДНА цифра — никакого наложения/ghosting (он раньше давал «мигание»):
+// предыдущая не держится, въезд новой и есть переход. Сам бейдж overflow-hidden,
+// так что цифра выкатывается изнутри кружка. На первом появлении бейджа
+// направления нет — цифра статична, за появление отвечает обёртка CountBadge.
 function RollingDigits({ value }: { value: number }) {
   const [current, setCurrent] = React.useState(value)
-  const [changed, setChanged] = React.useState(false)
+  const [dir, setDir] = React.useState<'up' | 'down' | null>(null)
   if (current !== value) {
+    setDir(value > current ? 'up' : 'down')
     setCurrent(value)
-    setChanged(true)
   }
   React.useEffect(() => {
-    if (!changed) return
-    const timer = window.setTimeout(() => setChanged(false), 200)
+    if (!dir) return
+    const timer = window.setTimeout(() => setDir(null), 220)
     return () => window.clearTimeout(timer)
-  }, [changed])
+  }, [dir, current])
 
   return (
     <span
       key={current}
       className={cn(
-        'inline-block',
-        changed &&
-          'duration-200 animate-in zoom-in-90 [animation-timing-function:cubic-bezier(0.34,1.3,0.7,1)]',
+        'inline-block tabular-nums [animation-timing-function:cubic-bezier(0.34,1.3,0.7,1)]',
+        dir === 'up' && 'duration-200 animate-in fade-in-0 slide-in-from-bottom-1',
+        dir === 'down' && 'duration-200 animate-in fade-in-0 slide-in-from-top-1',
       )}
     >
       {current}
@@ -105,7 +107,7 @@ function CountBadge({ count }: { count: number }) {
     >
       <span
         ref={badgeRef}
-        className="flex h-3.5 min-w-3.5 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[0.625rem] font-semibold text-primary-foreground tabular-nums"
+        className="flex h-3.5 min-w-3.5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary px-1 text-[0.625rem] font-semibold text-primary-foreground tabular-nums"
       >
         <RollingDigits key={visible ? 'on' : 'off'} value={display} />
       </span>
@@ -143,14 +145,156 @@ function DepartmentChip({
   )
 }
 
-function DepartmentSelect({
+// Плавно тянется под высоту контента. ResizeObserver ловит ЛЮБОЕ изменение
+// (смена профиля, перетекание чипов, ресайз) — высота всегда равна натуральной,
+// а переход к ней анимируется. overflow прячем ТОЛЬКО на время анимации: в покое
+// он видим, поэтому тень/фокус и нажатие (active:translate-y) чипов на нижней
+// строке не обрезаются. Модалка (height:auto) плавно следует за высотой.
+function AnimatedHeight({ children }: { children: React.ReactNode }) {
+  const outerRef = React.useRef<HTMLDivElement>(null)
+  const innerRef = React.useRef<HTMLDivElement>(null)
+  const prevHeight = React.useRef<number | null>(null)
+
+  React.useLayoutEffect(() => {
+    const outer = outerRef.current
+    const inner = innerRef.current
+    if (!outer || !inner) return
+
+    const reduceMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
+    let timer: number | undefined
+
+    const apply = () => {
+      const next = inner.offsetHeight
+      const first = prevHeight.current === null
+      prevHeight.current = next
+      // первый кадр / reduced-motion — ставим высоту мгновенно (без анимации)
+      if (first || reduceMotion) {
+        outer.style.transition = 'none'
+        outer.style.height = `${next}px`
+        return
+      }
+      // «Откуда» берём из ФАКТИЧЕСКОЙ текущей высоты (а не из прошлой цели): если
+      // клик пришёл во время идущей анимации, стартуем от того места, где она
+      // сейчас, а не снапаем на старую цель. Иначе виден скачок высоты, и за ним
+      // дёргается весь центрированный диалог.
+      const from = outer.getBoundingClientRect().height
+      if (Math.abs(from - next) < 0.5) {
+        outer.style.transition = 'none'
+        outer.style.height = `${next}px`
+        return
+      }
+      window.clearTimeout(timer)
+      outer.style.overflow = 'hidden'
+      outer.style.transition = 'none'
+      outer.style.height = `${from}px`
+      void outer.offsetHeight // фиксируем стартовую высоту до анимации
+      outer.style.transition = 'height 260ms cubic-bezier(0.22, 1, 0.36, 1)'
+      outer.style.height = `${next}px`
+      timer = window.setTimeout(() => {
+        outer.style.overflow = ''
+      }, 300)
+    }
+
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(inner)
+    return () => {
+      observer.disconnect()
+      window.clearTimeout(timer)
+    }
+  }, [])
+
+  return (
+    <div ref={outerRef}>
+      <div ref={innerRef}>{children}</div>
+    </div>
+  )
+}
+
+// FLIP: при смене ширины чипа (появилась/ушла галочка) соседи и переносы строк
+// двигаются не скачком, а плавно. Меряем позиции обёрток до/после рендера, гасим
+// разницу обратным transform и анимируем его к нулю. transform живёт на обёртке —
+// отдельной от кнопки, чтобы не конфликтовать с её active:translate-y.
+function DepartmentChips({
+  departments,
+  selected,
+  onToggle,
+}: {
+  departments: readonly { name: string; aliases: readonly string[] }[]
+  selected: Set<string>
+  onToggle: (name: string) => void
+}) {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const prevRects = React.useRef(
+    new Map<string, { left: number; top: number }>(),
+  )
+
+  React.useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    // Координаты чипов меряем ОТНОСИТЕЛЬНО контейнера, а не вьюпорта: пока едет
+    // высота, центрированный диалог сам уезжает по вертикали — в абсолютных
+    // координатах сместились бы СРАЗУ все чипы, и FLIP принял бы это за их
+    // переезд и дёрнул бы их все одновременно. Относительные координаты
+    // реагируют только на реальное перетекание чипов внутри контейнера.
+    const base = container.getBoundingClientRect()
+
+    for (const wrap of Array.from(container.children) as HTMLElement[]) {
+      const name = wrap.dataset.name
+      if (!name) continue
+      const rect = wrap.getBoundingClientRect()
+      const left = rect.left - base.left
+      const top = rect.top - base.top
+      const prev = prevRects.current.get(name)
+      prevRects.current.set(name, { left, top })
+      if (!prev) continue
+      const dx = prev.left - left
+      const dy = prev.top - top
+      if (!dx && !dy) continue
+      wrap.style.transition = 'none'
+      wrap.style.transform = `translate(${dx}px, ${dy}px)`
+      requestAnimationFrame(() => {
+        wrap.style.transition = 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1)'
+        wrap.style.transform = ''
+      })
+    }
+  })
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex flex-wrap gap-1.5 duration-200 ease-out animate-in fade-in-0"
+    >
+      {departments.map((department) => (
+        <div key={department.name} data-name={department.name} className="inline-flex">
+          <DepartmentChip
+            name={department.name}
+            label={departmentShortLabel(department)}
+            selected={selected.has(department.name)}
+            onToggle={() => onToggle(department.name)}
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function DepartmentSelect({
   value,
   onChange,
 }: {
   value: string[]
   onChange: (value: string[]) => void
 }) {
-  const selected = React.useMemo(() => new Set(value), [value])
+  const canonicalValue = React.useMemo(
+    () => [...new Set(value.map(resolveDepartmentName).filter(Boolean))],
+    [value],
+  )
+  const selected = React.useMemo(() => new Set(canonicalValue), [canonicalValue])
   const [activeProfile, setActiveProfile] = React.useState<string>(
     DEPARTMENT_GROUPS[0].profile,
   )
@@ -158,54 +302,24 @@ function DepartmentSelect({
   const toggle = (name: string) => {
     onChange(
       selected.has(name)
-        ? value.filter((item) => item !== name)
-        : [...value, name],
+        ? canonicalValue.filter((item) => item !== name)
+        : [...canonicalValue, name],
     )
   }
 
   const countByProfile = React.useMemo(() => {
     const counts = new Map<string, number>()
-    for (const name of value) {
+    for (const name of canonicalValue) {
       const option = DEPARTMENT_BY_NAME.get(name)
       if (option)
         counts.set(option.profile, (counts.get(option.profile) ?? 0) + 1)
     }
     return counts
-  }, [value])
+  }, [canonicalValue])
 
   const activeGroup =
     DEPARTMENT_GROUPS.find((g) => g.profile === activeProfile) ??
     DEPARTMENT_GROUPS[0]
-
-  // Высота через FLIP. Чипы активного профиля рендерим сами (а не через Radix
-  // TabsContent, который подменяет контент НЕ синхронно со стейтом) — поэтому
-  // layout-эффект меряет новую высоту корректно. При смене профиля анимируем
-  // (старая высота → reflow → новая), при выборе чипа ставим высоту мгновенно,
-  // чтобы не было reveal/обрезки. Никакого лага и кадра-скачка.
-  const outerRef = React.useRef<HTMLDivElement>(null)
-  const innerRef = React.useRef<HTMLDivElement>(null)
-  const prevHeight = React.useRef<number | null>(null)
-  const prevProfile = React.useRef(activeProfile)
-  React.useLayoutEffect(() => {
-    const outer = outerRef.current
-    const inner = innerRef.current
-    if (!outer || !inner) return
-    const next = inner.offsetHeight
-    const prev = prevHeight.current
-    const profileChanged = prevProfile.current !== activeProfile
-    prevHeight.current = next
-    prevProfile.current = activeProfile
-    if (prev === null || prev === next || !profileChanged) {
-      outer.style.transition = 'none'
-      outer.style.height = `${next}px`
-      return
-    }
-    outer.style.transition = 'none'
-    outer.style.height = `${prev}px`
-    void outer.offsetHeight // форсим reflow, чтобы зафиксировать старую высоту
-    outer.style.transition = 'height 240ms cubic-bezier(0.22, 1, 0.36, 1)'
-    outer.style.height = `${next}px`
-  }, [activeProfile, value])
 
   return (
     <div className="flex min-w-0 flex-col">
@@ -227,29 +341,21 @@ function DepartmentSelect({
         </TabsList>
       </Tabs>
 
-      <div ref={outerRef} className="overflow-hidden">
-        <div ref={innerRef} className="pt-2.5">
-          <div
+      <AnimatedHeight>
+        <div className="pt-2.5">
+          <DepartmentChips
             key={activeProfile}
-            className="flex flex-wrap gap-1.5 duration-200 ease-out animate-in fade-in-0"
-          >
-            {activeGroup.departments.map((department) => (
-              <DepartmentChip
-                key={department.name}
-                name={department.name}
-                label={departmentShortLabel(department)}
-                selected={selected.has(department.name)}
-                onToggle={() => toggle(department.name)}
-              />
-            ))}
-          </div>
+            departments={activeGroup.departments}
+            selected={selected}
+            onToggle={toggle}
+          />
         </div>
-      </div>
+      </AnimatedHeight>
     </div>
   )
 }
 
-function NoteField({
+export function NoteField({
   value,
   placeholder,
   onChange,

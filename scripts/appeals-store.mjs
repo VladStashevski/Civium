@@ -10,6 +10,12 @@ import {
 import {
   normalizeExcelRows as normalizeStrictExcelRows,
 } from './complaints-parser-strict.mjs'
+import {
+  DEPARTMENT_BY_NAME,
+  DEPARTMENT_GROUPS,
+  DEPARTMENT_OPTIONS,
+  resolveDepartmentName,
+} from './departments.mjs'
 
 export const STORE_VERSION = 7
 
@@ -340,23 +346,79 @@ export function buildReferenceData(records) {
     rubrics: buildRubricReferences(records),
     themes: buildThematicGroupReferences(records),
     sources: buildSourceReferences(records),
-    departments: buildNamedReferences(
-      records,
-      (record) => getEffectiveDepartments(record),
-      {
-        type: 'department',
-        multiple: true,
-      }
-    ),
+    profiles: buildDepartmentProfileReferences(records),
+    departments: buildDepartmentReferences(records),
   }
 }
 
-function hasTableRubric(record) {
-  const rubricName = normalizeRubricName(record.rawRubric)
-  return Boolean(
-    clean(record.rubricCode || extractRubricCode(record.rawRubric)) ||
-      rubricName
+function buildDepartmentProfileReferences(records) {
+  const profiles = new Map(
+    DEPARTMENT_GROUPS.map((group) => [
+      group.profile,
+      {
+        id: `department-profile:${fingerprint(group.profile)}`,
+        key: fingerprint(group.profile),
+        name: group.profile,
+        short: group.short,
+        count: 0,
+        years: {},
+        months: {},
+      },
+    ])
   )
+
+  for (const record of records) {
+    const recordProfiles = new Set(
+      getEffectiveDepartments(record)
+        .map((department) => DEPARTMENT_BY_NAME.get(resolveDepartmentName(department))?.profile)
+        .filter(Boolean)
+    )
+    for (const profile of recordProfiles) {
+      const item = profiles.get(profile)
+      if (!item) continue
+      item.count += 1
+      incrementReferencePeriod(item, record)
+    }
+  }
+
+  return DEPARTMENT_GROUPS.map((group) => profiles.get(group.profile))
+}
+
+function buildDepartmentReferences(records) {
+  const departments = new Map(
+    DEPARTMENT_OPTIONS.map((department) => [
+      department.value,
+      {
+        id: `department:${fingerprint(department.value)}`,
+        key: fingerprint(department.value),
+        name: department.value,
+        profile: department.profile,
+        count: 0,
+        years: {},
+        months: {},
+      },
+    ])
+  )
+
+  for (const record of records) {
+    for (const department of new Set(getEffectiveDepartments(record).map(resolveDepartmentName))) {
+      const item = departments.get(department)
+      if (!item) continue
+      item.count += 1
+      incrementReferencePeriod(item, record)
+    }
+  }
+
+  return DEPARTMENT_OPTIONS.map((department) => departments.get(department.value))
+}
+
+function incrementReferencePeriod(item, record) {
+  if (!record.year) return
+  item.years[record.year] = (item.years[record.year] ?? 0) + 1
+  const month = String(record.dateIso || '').slice(5, 7)
+  if (!/^\d{2}$/.test(month)) return
+  item.months[record.year] ??= {}
+  item.months[record.year][month] = (item.months[record.year][month] ?? 0) + 1
 }
 
 function sheetToRowsWithDetectedHeader(sheet) {
@@ -552,169 +614,6 @@ function buildNamedReferences(records, getValue, options = {}) {
 function addUnique(list, value) {
   const text = clean(value)
   if (text && !list.includes(text)) list.push(text)
-}
-
-export function buildAppealsAnalytics(records, filters = {}) {
-  const appeals = filterAppeals(records.map(migrateRecord), filters)
-  const total = appeals.length
-
-  return {
-    generatedAt: new Date().toISOString(),
-    filters,
-    total,
-    dateRange: getDateRange(appeals),
-    byYear: countList(appeals, (record) => String(record.year || 'Не указан')),
-    byMonth: countList(appeals, (record) => record.month || 'Не указан'),
-    bySource: countList(
-      appeals.filter((record) => record.appealMode === APPEAL_MODES.external),
-      (record) => record.sourceOrganization || record.documentSource || record.source
-    ),
-    byDelivery: countList(appeals, (record) => record.delivery || 'Не указан'),
-    byChiefDoctorChannel: countList(
-      appeals.filter((record) => record.appealMode === APPEAL_MODES.chiefDoctor),
-      (record) => record.sourceChannel || record.delivery || 'Не указан'
-    ),
-    byDeadlineStatus: countList(appeals, (record) => record.deadlineStatus || 'unknown'),
-    byDepartment: countList(appeals, (record) => getEffectiveDepartments(record), {
-      multiple: true,
-    }),
-    byTheme: countList(appeals, (record) => record.rubricTheme || 'Тематика не указана'),
-    byRubric: countList(
-      appeals,
-      (record) => record.rubricCanonicalName || 'Без рубрики'
-    ),
-    byJustified: countList(appeals, (record) => getJustificationLabel(record)),
-    byResponsible: countList(
-      appeals,
-      (record) => record.manualFields?.responsible || 'Не указан'
-    ),
-    yearMonthMatrix: buildYearMonthMatrix(appeals),
-    overdue: appeals
-      .filter((record) => record.deadlineStatus === 'overdue')
-      .map(toAppealSummary),
-  }
-}
-
-export function buildAppealsGraph(records, filters = {}) {
-  const appeals = filterAppeals(records.map(migrateRecord), filters)
-  const nodes = new Map()
-  const edges = new Map()
-
-  for (const appeal of appeals) {
-    addNode(nodes, {
-      id: appeal.uid,
-      type: 'appeal',
-      label: appeal.id,
-      data: toAppealSummary(appeal),
-    })
-
-    const applicantId = `applicant:${fingerprint(appeal.applicant?.name)}`
-    addNode(nodes, {
-      id: applicantId,
-      type: 'applicant',
-      label: appeal.applicant?.name || 'Не указан',
-      data: {
-        location: appeal.location,
-        raw: appeal.correspondentRaw,
-      },
-    })
-    addEdge(edges, applicantId, appeal.uid, 'submitted')
-
-    for (const person of getEffectiveAffectedPeople(appeal)) {
-      const personId = `person:${fingerprint(person.name)}`
-      addNode(nodes, {
-        id: personId,
-        type: 'affectedPerson',
-        label: person.name,
-        data: {
-          relation: person.relation,
-          confidence: person.confidence,
-        },
-      })
-      addEdge(edges, appeal.uid, personId, 'about')
-    }
-
-    for (const department of getEffectiveDepartments(appeal)) {
-      const departmentId = `department:${fingerprint(department)}`
-      addNode(nodes, {
-        id: departmentId,
-        type: 'department',
-        label: department,
-      })
-      addEdge(edges, appeal.uid, departmentId, 'assigned_to')
-    }
-
-    const theme = appeal.rubricTheme || 'Тематика не указана'
-    const themeId = `theme:${fingerprint(theme)}`
-    addNode(nodes, {
-      id: themeId,
-      type: 'theme',
-      label: theme,
-    })
-    addEdge(edges, appeal.uid, themeId, 'grouped_by_theme')
-
-    const sourceId = `source:${fingerprint(appeal.documentSource || appeal.source)}`
-    addNode(nodes, {
-      id: sourceId,
-      type: 'source',
-      label: appeal.documentSource || appeal.source || 'Источник не указан',
-    })
-    addEdge(edges, sourceId, appeal.uid, 'routed')
-
-    if (appeal.recipient && appeal.recipient !== 'Не указан') {
-      const recipientId = `recipient:${fingerprint(appeal.recipient)}`
-      addNode(nodes, {
-        id: recipientId,
-        type: 'recipient',
-        label: appeal.recipient,
-      })
-      addEdge(edges, appeal.uid, recipientId, 'sent_to')
-    }
-
-    if (appeal.supportDocument) {
-      const responseId = `document:${fingerprint(appeal.supportDocument)}`
-      addNode(nodes, {
-        id: responseId,
-        type: 'document',
-        label: appeal.supportDocument.split('\n')[0].slice(0, 120),
-        data: {
-          text: appeal.supportDocument,
-        },
-      })
-      addEdge(edges, responseId, appeal.uid, 'source_document')
-    }
-
-    if (appeal.manualFields?.responsible) {
-      const responsibleId = `responsible:${fingerprint(appeal.manualFields.responsible)}`
-      addNode(nodes, {
-        id: responsibleId,
-        type: 'responsible',
-        label: appeal.manualFields.responsible,
-      })
-      addEdge(edges, appeal.uid, responsibleId, 'responsible')
-    }
-
-    if (appeal.manualFields?.caseId) {
-      const caseId = `case:${fingerprint(appeal.manualFields.caseId)}`
-      addNode(nodes, {
-        id: caseId,
-        type: 'case',
-        label: appeal.manualFields.caseId,
-      })
-      addEdge(edges, appeal.uid, caseId, 'part_of_case')
-    }
-  }
-
-  addRepeatApplicantEdges(appeals, edges)
-  addRepeatAffectedPersonEdges(appeals, edges)
-  addSimilarContentEdges(appeals, edges)
-
-  return {
-    generatedAt: new Date().toISOString(),
-    filters,
-    nodes: [...nodes.values()],
-    edges: [...edges.values()],
-  }
 }
 
 export function getRecordKey(record) {
@@ -1476,28 +1375,6 @@ function getDeadlineStatus({ deadlineAt, completedAt, isDiscontinued }) {
     : 'in_progress'
 }
 
-function filterAppeals(records, filters = {}) {
-  return records.filter((record) => {
-    if (filters.from && record.dateIso && record.dateIso < filters.from) return false
-    if (filters.to && record.dateIso && record.dateIso > filters.to) return false
-    if (
-      filters.applicant &&
-      !clean(record.applicant?.name).toLowerCase().includes(clean(filters.applicant).toLowerCase())
-    ) {
-      return false
-    }
-    if (filters.department) {
-      const departments = getEffectiveDepartments(record)
-      if (!departments.includes(filters.department)) return false
-    }
-    return true
-  })
-}
-
-function getEffectiveCategory(record) {
-  return record.manualFields?.category || record.officialCategory || record.documentTopic || record.profile || 'Иные обращения'
-}
-
 function getEffectiveDepartments(record) {
   if (Array.isArray(record.manualFields?.departments)) {
     return record.manualFields.departments.length
@@ -1508,211 +1385,6 @@ function getEffectiveDepartments(record) {
   return Array.isArray(record.departments) && record.departments.length
     ? record.departments
     : ['Не указано']
-}
-
-function getEffectiveAffectedPeople(record) {
-  const override = clean(record.manualFields?.affectedPersonOverride)
-  if (override) return [{ name: override, relation: 'manual', confidence: 'manual' }]
-  return Array.isArray(record.affectedPeople) ? record.affectedPeople : []
-}
-
-function countList(records, getValue, options = {}) {
-  const counts = new Map()
-  for (const record of records) {
-    const values = options.multiple ? getValue(record) : [getValue(record)]
-    for (const value of values) {
-      const key = clean(value) || 'Не указан'
-      counts.set(key, (counts.get(key) ?? 0) + 1)
-    }
-  }
-  return [...counts.entries()]
-    .map(([name, count]) => ({
-      name,
-      count,
-      share: records.length ? Number(((count / records.length) * 100).toFixed(1)) : 0,
-    }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru'))
-}
-
-function buildYearMonthMatrix(records) {
-  const years = [...new Set(records.map((record) => record.year).filter(Boolean))].sort()
-  const months = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'))
-
-  return months.map((month) => {
-    const item = { month }
-    for (const year of years) {
-      item[year] = records.filter((record) => record.year === year && record.month?.endsWith(`-${month}`)).length
-    }
-    return item
-  })
-}
-
-function addNode(nodes, node) {
-  if (!nodes.has(node.id)) nodes.set(node.id, node)
-}
-
-function addEdge(edges, source, target, type, data) {
-  const id = `${source}->${target}:${type}`
-  if (!edges.has(id)) {
-    edges.set(id, data ? { id, source, target, type, data } : { id, source, target, type })
-  }
-}
-
-function addRepeatApplicantEdges(appeals, edges) {
-  const byApplicant = new Map()
-  for (const appeal of appeals) {
-    const key = fingerprint(appeal.applicant?.name)
-    if (!key || key === fingerprint('Не указан')) continue
-    if (!byApplicant.has(key)) byApplicant.set(key, [])
-    byApplicant.get(key).push(appeal)
-  }
-
-  for (const group of byApplicant.values()) {
-    const sorted = group.slice().sort(compareAppeals)
-    for (let index = 1; index < sorted.length; index += 1) {
-      addEdge(edges, sorted[index - 1].uid, sorted[index].uid, 'same_applicant_repeat')
-    }
-  }
-}
-
-function addRepeatAffectedPersonEdges(appeals, edges) {
-  const byPerson = new Map()
-  for (const appeal of appeals) {
-    for (const person of getEffectiveAffectedPeople(appeal)) {
-      const key = fingerprint(person.name)
-      if (!key || key === fingerprint('Не указан')) continue
-      if (!byPerson.has(key)) byPerson.set(key, [])
-      byPerson.get(key).push(appeal)
-    }
-  }
-
-  for (const group of byPerson.values()) {
-    const sorted = [...new Map(group.map((appeal) => [appeal.uid, appeal])).values()].sort(
-      compareAppeals
-    )
-    for (let index = 1; index < sorted.length; index += 1) {
-      addEdge(edges, sorted[index - 1].uid, sorted[index].uid, 'same_patient_repeat')
-    }
-  }
-}
-
-function addSimilarContentEdges(appeals, edges) {
-  const byApplicant = new Map()
-  const prepared = new Map(
-    appeals.map((appeal) => [
-      appeal.uid,
-      {
-        normalized: normalizeSimilarityText(appeal.content),
-        tokens: new Set(tokenizeSimilarityText(appeal.content)),
-      },
-    ])
-  )
-
-  for (const appeal of appeals) {
-    const key = fingerprint(appeal.applicant?.name)
-    if (!key || key === fingerprint('Не указан')) continue
-    if (!byApplicant.has(key)) byApplicant.set(key, [])
-    byApplicant.get(key).push(appeal)
-  }
-
-  for (const group of byApplicant.values()) {
-    for (let leftIndex = 0; leftIndex < group.length; leftIndex += 1) {
-      for (let rightIndex = leftIndex + 1; rightIndex < group.length; rightIndex += 1) {
-        const left = prepared.get(group[leftIndex].uid)
-        const right = prepared.get(group[rightIndex].uid)
-        if (!left?.normalized || !right?.normalized) continue
-
-        const exact = left.normalized === right.normalized && left.normalized.length >= 40
-        const score = exact ? 1 : jaccardSimilarity(left.tokens, right.tokens)
-        if (!exact && (left.tokens.size < 6 || right.tokens.size < 6 || score < 0.55)) {
-          continue
-        }
-
-        addEdge(
-          edges,
-          group[leftIndex].uid,
-          group[rightIndex].uid,
-          'similar_content',
-          { similarity: Number(score.toFixed(2)) }
-        )
-      }
-    }
-  }
-}
-
-function normalizeSimilarityText(value) {
-  return clean(value)
-    .toLocaleLowerCase('ru-RU')
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function tokenizeSimilarityText(value) {
-  const stopWords = new Set([
-    'вашего',
-    'вашей',
-    'который',
-    'которая',
-    'которые',
-    'обращение',
-    'обращения',
-    'прошу',
-    'здравствуйте',
-    'спасибо',
-  ])
-  return normalizeSimilarityText(value)
-    .split(' ')
-    .filter((token) => token.length >= 4 && !stopWords.has(token))
-}
-
-function jaccardSimilarity(left, right) {
-  let intersection = 0
-  for (const token of left) {
-    if (right.has(token)) intersection += 1
-  }
-  const union = left.size + right.size - intersection
-  return union ? intersection / union : 0
-}
-
-function toAppealSummary(record) {
-  return {
-    uid: record.uid,
-    appealKey: record.appealKey,
-    id: record.id,
-    year: record.year,
-    dateIso: record.dateIso,
-    content: record.content,
-    applicant: record.applicant?.name,
-    location: record.location,
-    profile: record.rubricCanonicalName || 'Без рубрики',
-    rubricTheme: record.rubricTheme || 'Тематика не указана',
-    rubricCode: record.rubricCode || '',
-    rubricName: record.rubricName || '',
-    rubricSource: record.rubricSource ?? 'missing',
-    justified:
-      record.manualFields?.isJustified === undefined
-        ? null
-        : Boolean(record.manualFields.isJustified),
-    departments: getEffectiveDepartments(record),
-    responsible: record.manualFields?.responsible ?? '',
-    notes: record.manualFields?.notes ?? '',
-    issues: record.manualFields?.issues ?? '',
-    recipient: record.recipient ?? 'Не указан',
-    source: record.documentSource || record.source,
-  }
-}
-
-function getJustificationLabel(record) {
-  const value = record.manualFields?.isJustified
-  if (value === true) return 'Обоснованное'
-  if (value === false) return 'Необоснованное'
-  return 'Не определено'
-}
-
-function getDateRange(records) {
-  const dates = records.map((record) => record.dateIso).filter(Boolean).sort()
-  return { from: dates[0] ?? '', to: dates.at(-1) ?? '' }
 }
 
 function compareAppeals(left, right) {

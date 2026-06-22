@@ -12,6 +12,7 @@ import {
   type AppealPatch,
   type AppealsResponse,
 } from '@/lib/api'
+import { syncAnnotationTimestamps } from '../../scripts/appeal-annotations.mjs'
 
 export function useSession() {
   return useQuery({
@@ -153,22 +154,7 @@ function applyManualPatch(appeal: Appeal, patch: AppealPatch): Appeal {
     }
   }
 
-  const hasAnnotation =
-    manualFields.isJustified !== undefined ||
-    Boolean(manualFields.notes?.trim()) ||
-    Boolean(manualFields.issues?.trim()) ||
-    Boolean(manualFields.departments?.length)
-
-  if (hasAnnotation) {
-    manualFields.annotationCreatedAt =
-      typeof manualFields.annotationCreatedAt === 'string'
-        ? manualFields.annotationCreatedAt
-        : now
-    manualFields.annotationUpdatedAt = now
-  } else {
-    delete manualFields.annotationCreatedAt
-    delete manualFields.annotationUpdatedAt
-  }
+  syncAnnotationTimestamps(manualFields, now)
 
   return { ...appeal, manualFields }
 }

@@ -14,12 +14,12 @@ export const DEPARTMENT_GROUPS = [
       { name: 'Гинекологическое отделение', aliases: ['Гинекология'] },
       { name: 'Колопроктологическое отделение', aliases: ['Колопроктология'] },
       { name: 'Офтальмологическое отделение', aliases: ['Офтальмология'] },
-      { name: 'Оториноларингологическое отделение', aliases: ['ЛОР'] },
+      { name: 'Оториноларингологическое отделение', aliases: ['ЛОР', 'ЛОР-отделение'] },
       {
         name: 'Отделение челюстно-лицевой хирургии',
         aliases: ['ЧЛХ'],
       },
-      { name: 'Хирургическое отделение', aliases: ['Хирургия'] },
+      { name: 'Хирургическое отделение', aliases: ['Хирургия', 'Хирургическое отделение №1'] },
       {
         name: 'Отделение реанимации и интенсивной терапии',
         aliases: ['Реанимация'],
@@ -84,7 +84,7 @@ export const DEPARTMENT_GROUPS = [
     departments: [
       {
         name: 'Онкологическое отделение консультативно-диагностической поликлиники',
-        aliases: ['Онкол. отд. КДП', 'КДП'],
+        aliases: ['Онкол. отд. КДП', 'КДП', 'Онкологическое отделение'],
       },
       {
         name: 'Центр амбулаторной онкологической помощи',
@@ -119,6 +119,11 @@ export const DEPARTMENT_GROUPS = [
       { name: 'Рентгенологическое отделение', aliases: ['Рентген.'] },
       { name: 'Отделение ультразвуковой диагностики', aliases: ['УЗИ'] },
       { name: 'Отделение платных услуг', aliases: ['Платные усл.'] },
+      { name: 'Сурдологическое отделение', aliases: ['Сурдология'] },
+      {
+        name: 'Центр аллергологии и иммунологии',
+        aliases: ['Аллергология', 'Иммунология'],
+      },
     ],
   },
 ] as const
@@ -137,6 +142,21 @@ export const DEPARTMENT_OPTIONS: DepartmentOption[] = DEPARTMENT_GROUPS.flatMap(
 export const DEPARTMENT_BY_NAME = new Map(
   DEPARTMENT_OPTIONS.map((option) => [option.value, option] as const),
 )
+
+export const DEPARTMENT_ALIAS_TO_NAME = new Map(
+  DEPARTMENT_OPTIONS.flatMap((option) => [
+    [option.value.toLocaleLowerCase('ru-RU'), option.value] as const,
+    ...option.aliases.map(
+      (alias) => [alias.toLocaleLowerCase('ru-RU'), option.value] as const,
+    ),
+  ]),
+)
+
+export function resolveDepartmentName(value?: string): string {
+  const text = String(value ?? '').trim()
+  if (!text) return ''
+  return DEPARTMENT_ALIAS_TO_NAME.get(text.toLocaleLowerCase('ru-RU')) ?? text
+}
 
 /** Короткая подпись для чипа: первый алиас, иначе имя без слова «отделение». */
 export function departmentShortLabel(option: {

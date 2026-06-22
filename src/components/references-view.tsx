@@ -23,8 +23,24 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useReferences } from '@/hooks/use-appeals'
+import { usePersistentState } from '@/hooks/use-persistent-state'
 import type { AppealMode, RefItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
+
+const MONTHS_SHORT = [
+  'янв',
+  'фев',
+  'мар',
+  'апр',
+  'май',
+  'июн',
+  'июл',
+  'авг',
+  'сен',
+  'окт',
+  'ноя',
+  'дек',
+]
 
 function TextCell({
   value,
@@ -103,8 +119,25 @@ function CountCell({ value, strong = false }: { value: number; strong?: boolean 
   )
 }
 
+function MonthCountCell({ value }: { value: number }) {
+  return (
+    <TableCell
+      className={cn(
+        'w-14 text-right text-xs tabular-nums',
+        value ? 'font-medium text-foreground' : 'text-muted-foreground',
+      )}
+    >
+      {value}
+    </TableCell>
+  )
+}
+
 function yearCount(item: RefItem, year: number): number {
   return item.years?.[String(year)] ?? 0
+}
+
+function monthCount(item: RefItem, year: number, month: string): number {
+  return item.months?.[String(year)]?.[month] ?? 0
 }
 
 function byCurrentYear<T extends RefItem>(rows: T[], year: number): T[] {
@@ -143,12 +176,18 @@ function DeltaCell({
 
 export function ReferencesView({ mode }: { mode: AppealMode }) {
   const { data, isPending } = useReferences(mode)
+  const [tab, setTab] = usePersistentState('references:tab', 'rubrics')
   const rubrics = data?.rubrics ?? []
   const themes = data?.themes ?? []
   const sources = data?.sources ?? []
+  const profiles = data?.profiles ?? []
   const departments = data?.departments ?? []
   const currentYear = data?.comparison.currentYear ?? 0
   const previousYear = data?.comparison.previousYear ?? currentYear - 1
+  const cutoffMonth = Number(data?.comparison.cutoffMonthDay.slice(0, 2)) || 12
+  const profileMonths = Array.from({ length: cutoffMonth }, (_, index) =>
+    String(index + 1).padStart(2, '0'),
+  )
   const periodLabel = data
     ? `Сопоставимый период ${previousYear} и ${currentYear} годов`
     : ''
@@ -190,7 +229,7 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
               ))}
             </div>
           ) : (
-            <Tabs defaultValue="rubrics" className="gap-4">
+            <Tabs value={tab} onValueChange={setTab} className="gap-4">
               <div className="-mx-1 overflow-x-auto px-1">
                 <TabsList>
                 <TabsTrigger value="rubrics">
@@ -211,6 +250,12 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                     {sources.length}
                   </Badge>
                 </TabsTrigger>
+                <TabsTrigger value="profiles">
+                  Профили
+                  <Badge variant="secondary" className="ml-1.5">
+                    {profiles.length}
+                  </Badge>
+                </TabsTrigger>
                 <TabsTrigger value="departments">
                   Отделения
                   <Badge variant="secondary" className="ml-1.5">
@@ -220,7 +265,11 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                 </TabsList>
               </div>
 
-              <TabsContent value="rubrics">
+              <TabsContent
+                value="rubrics"
+                forceMount
+                className="data-[state=inactive]:hidden"
+              >
                 <div className="overflow-hidden rounded-lg border">
                   <Table className="table-fixed">
                     <TableHeader>
@@ -251,7 +300,11 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                 </div>
               </TabsContent>
 
-              <TabsContent value="themes">
+              <TabsContent
+                value="themes"
+                forceMount
+                className="data-[state=inactive]:hidden"
+              >
                 <div className="overflow-hidden rounded-lg border">
                   <Table className="table-fixed">
                     <TableHeader>
@@ -282,7 +335,11 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                 </div>
               </TabsContent>
 
-              <TabsContent value="sources">
+              <TabsContent
+                value="sources"
+                forceMount
+                className="data-[state=inactive]:hidden"
+              >
                 <div className="overflow-hidden rounded-lg border">
                   <Table className="table-fixed">
                     <TableHeader>
@@ -310,12 +367,56 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                 </div>
               </TabsContent>
 
-              <TabsContent value="departments">
+              <TabsContent
+                value="profiles"
+                forceMount
+                className="data-[state=inactive]:hidden"
+              >
+                <div className="overflow-hidden rounded-lg border">
+                  <Table className="table-fixed">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Профиль</TableHead>
+                        {profileMonths.map((month) => (
+                          <TableHead
+                            key={month}
+                            className="w-14 text-right text-xs"
+                          >
+                            {MONTHS_SHORT[Number(month) - 1]}
+                          </TableHead>
+                        ))}
+                        {comparisonHeaders}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {byCurrentYear(profiles, currentYear).map((p) => (
+                        <TableRow key={p.id}>
+                          <TextCell value={p.name} className="font-medium" />
+                          {profileMonths.map((month) => (
+                            <MonthCountCell
+                              key={month}
+                              value={monthCount(p, currentYear, month)}
+                            />
+                          ))}
+                          {comparisonCells(p)}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+
+              <TabsContent
+                value="departments"
+                forceMount
+                className="data-[state=inactive]:hidden"
+              >
                 <div className="overflow-hidden rounded-lg border">
                   <Table className="table-fixed">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Отделение</TableHead>
+                        <TableHead className="w-1/4">Профиль</TableHead>
                         {comparisonHeaders}
                       </TableRow>
                     </TableHeader>
@@ -323,6 +424,10 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                       {byCurrentYear(departments, currentYear).map((d) => (
                         <TableRow key={d.id}>
                           <TextCell value={d.name} className="font-medium" />
+                          <TextCell
+                            value={d.profile}
+                            className="text-muted-foreground"
+                          />
                           {comparisonCells(d)}
                         </TableRow>
                       ))}

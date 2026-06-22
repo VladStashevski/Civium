@@ -20,6 +20,10 @@ data/
 uploads/
 .env
 
+# Seed-выгрузки для локального первого запуска (на прод не идут — Dockerfile.api их не копирует)
+statistic.xls
+pos-seed.xlsx
+
 # Vite / Playwright артефакты
 .vite/
 .playwright-mcp/

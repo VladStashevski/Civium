@@ -15,7 +15,7 @@ import {
   type ProfileRow,
 } from '@/lib/appeals-data'
 
-function DistributionCard({
+export function DistributionCard({
   title,
   description,
   rows,
@@ -32,66 +32,92 @@ function DistributionCard({
   currentYear: number
   previousYear: number
 }) {
-  const max = Math.max(
-    ...rows.flatMap((row) => [row.count, row.previousCount]),
-    1,
-  )
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {rows.length ? (
-          rows.map((r) => {
-            return (
-              <div key={r.name} className="flex flex-col gap-1.5">
-                <div className="flex items-start justify-between gap-3 text-sm">
-                  <span className="truncate" title={r.name}>
-                    {r.name}
-                  </span>
-                  <span
-                    className={cn(
-                      'shrink-0 rounded-md px-1.5 py-0.5 text-xs font-medium tabular-nums',
-                      r.delta > 0 && 'bg-destructive/10 text-destructive',
-                      r.delta < 0 && 'bg-positive/10 text-positive',
-                      r.delta === 0 && 'bg-muted text-muted-foreground',
-                    )}
-                  >
-                    {formatDeltaPercent(r.deltaPercent)}
-                  </span>
-                </div>
-                <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2rem] items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">{previousYear}</span>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-muted-foreground/45"
-                      style={{ width: `${(r.previousCount / max) * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-right tabular-nums text-muted-foreground">
-                    {r.previousCount}
-                  </span>
-                  <span className={pctClass}>{currentYear}</span>
-                  <div className="h-2 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={cn('h-full rounded-full', barClass)}
-                      style={{ width: `${(r.count / max) * 100}%` }}
-                    />
-                  </div>
-                  <span className={cn('text-right font-medium tabular-nums', pctClass)}>
-                    {r.count}
-                  </span>
-                </div>
-              </div>
-            )
-          })
-        ) : (
-          <p className="text-sm text-muted-foreground">Нет данных</p>
-        )}
+      <CardContent>
+        <DistributionRows
+          rows={rows}
+          barClass={barClass}
+          pctClass={pctClass}
+          currentYear={currentYear}
+          previousYear={previousYear}
+        />
       </CardContent>
     </Card>
+  )
+}
+
+export function DistributionRows({
+  rows,
+  barClass,
+  pctClass,
+  currentYear,
+  previousYear,
+}: {
+  rows: ProfileRow[]
+  barClass: string
+  pctClass: string
+  currentYear: number
+  previousYear: number
+}) {
+  const max = Math.max(
+    ...rows.flatMap((row) => [row.count, row.previousCount]),
+    1,
+  )
+  return (
+    <div className="flex flex-col gap-3">
+      {rows.length ? (
+        rows.map((r) => {
+          return (
+            <div key={r.name} className="flex flex-col gap-1.5">
+              <div className="flex items-start justify-between gap-3 text-sm">
+                <span className="truncate" title={r.name}>
+                  {r.name}
+                </span>
+                <span
+                  className={cn(
+                    'shrink-0 rounded-md px-1.5 py-0.5 text-xs font-medium tabular-nums',
+                    r.delta > 0 && 'bg-destructive/10 text-destructive',
+                    r.delta < 0 && 'bg-positive/10 text-positive',
+                    r.delta === 0 && 'bg-muted text-muted-foreground',
+                  )}
+                >
+                  {formatDeltaPercent(r.deltaPercent)}
+                </span>
+              </div>
+              <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2rem] items-center gap-2 text-xs">
+                <span className="text-muted-foreground">{previousYear}</span>
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-muted-foreground/45"
+                    style={{ width: `${(r.previousCount / max) * 100}%` }}
+                  />
+                </div>
+                <span className="text-right tabular-nums text-muted-foreground">
+                  {r.previousCount}
+                </span>
+                <span className={pctClass}>{currentYear}</span>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn('h-full rounded-full', barClass)}
+                    style={{ width: `${(r.count / max) * 100}%` }}
+                  />
+                </div>
+                <span className={cn('text-right font-medium tabular-nums', pctClass)}>
+                  {r.count}
+                </span>
+              </div>
+            </div>
+          )
+        })
+      ) : (
+        <p className="text-sm text-muted-foreground">Нет данных</p>
+      )}
+    </div>
   )
 }
 

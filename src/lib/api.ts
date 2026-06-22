@@ -62,7 +62,15 @@ export type ImportResult = {
 
 async function asJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    throw new Error(`Запрос не удался: ${res.status} ${res.statusText}`)
+    let message = `Запрос не удался: ${res.status} ${res.statusText}`
+    try {
+      const body = objectValue(await res.json())
+      const error = stringValue(body.error)
+      if (error) message = error
+    } catch {
+      // Some infrastructure errors return HTML or an empty body.
+    }
+    throw new Error(message)
   }
   return (await res.json()) as T
 }
@@ -167,15 +175,151 @@ export async function uploadExcel(file: File): Promise<ImportResult> {
   return asJson(await fetch('/api/imports/excel', { method: 'POST', body: form }))
 }
 
+// --- ПОС (Платформа обратной связи «Госуслуги. Решаем вместе») ---
+// Отдельный датасет со своим стором/таблицей. Аннотации: «отработано» + комментарий.
+
+export type PosMessage = {
+  uid: string
+  number: string
+  epguNumber: string
+  source: string
+  region: string
+  category: string
+  subcategory: string
+  fact: string
+  orgReceived: string
+  orgCurrent: string
+  dateIso: string
+  plannedIso: string
+  completedIso: string
+  stage: string
+  status: string
+  overdue: string
+  fastTrack: string
+  fz: string
+  chose59fz: string
+  resolutionType: string
+  sentByEmail: string
+  rating: number | null
+  repeated: string
+  coordinator: string
+  executor: string
+  manager: string
+  year: number
+  month: number
+  manualFields?: {
+    isJustified?: boolean
+    notes?: string
+    issues?: string
+    departments?: string[]
+    annotationCreatedAt?: string
+    annotationUpdatedAt?: string
+    [key: string]: unknown
+  }
+}
+
+export type PosResponse = {
+  items: PosMessage[]
+  total: number
+  updatedAt: string
+}
+
+export type PosPatch = {
+  uid: string
+  isJustified?: boolean | null
+  notes?: string
+  issues?: string
+  departments?: string[]
+}
+
+function normalizePosMessage(value: unknown): PosMessage {
+  const item = objectValue(value)
+  const manualFields = objectValue(item.manualFields)
+  const uid = stringValue(item.uid) || stringValue(item.number)
+  return {
+    ...(item as Partial<PosMessage>),
+    uid,
+    number: stringValue(item.number) || uid,
+    epguNumber: stringValue(item.epguNumber),
+    source: stringValue(item.source),
+    region: stringValue(item.region),
+    category: stringValue(item.category),
+    subcategory: stringValue(item.subcategory),
+    fact: stringValue(item.fact),
+    orgReceived: stringValue(item.orgReceived),
+    orgCurrent: stringValue(item.orgCurrent),
+    dateIso: stringValue(item.dateIso),
+    plannedIso: stringValue(item.plannedIso),
+    completedIso: stringValue(item.completedIso),
+    stage: stringValue(item.stage),
+    status: stringValue(item.status),
+    overdue: stringValue(item.overdue),
+    fastTrack: stringValue(item.fastTrack),
+    fz: stringValue(item.fz),
+    chose59fz: stringValue(item.chose59fz),
+    resolutionType: stringValue(item.resolutionType),
+    sentByEmail: stringValue(item.sentByEmail),
+    rating: typeof item.rating === 'number' ? item.rating : null,
+    repeated: stringValue(item.repeated),
+    coordinator: stringValue(item.coordinator),
+    executor: stringValue(item.executor),
+    manager: stringValue(item.manager),
+    year: numberValue(item.year),
+    month: numberValue(item.month),
+    manualFields: {
+      ...manualFields,
+      isJustified:
+        typeof manualFields.isJustified === 'boolean'
+          ? manualFields.isJustified
+          : undefined,
+      notes: stringValue(manualFields.notes) || undefined,
+      issues: stringValue(manualFields.issues) || undefined,
+      departments: stringArray(manualFields.departments),
+    },
+  }
+}
+
+export async function fetchPos(): Promise<PosResponse> {
+  const raw = objectValue(await asJson<unknown>(await fetch('/api/pos')))
+  const items = (Array.isArray(raw.items) ? raw.items : []).map(
+    normalizePosMessage,
+  )
+  return { items, total: items.length, updatedAt: stringValue(raw.updatedAt) }
+}
+
+export async function patchPos(body: PosPatch): Promise<{ item: PosMessage }> {
+  const raw = objectValue(
+    await asJson<unknown>(
+      await fetch('/api/pos', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    ),
+  )
+  return { item: normalizePosMessage(raw.item) }
+}
+
+export async function uploadPosExcel(file: File): Promise<ImportResult> {
+  const form = new FormData()
+  form.append('file', file)
+  return asJson(
+    await fetch('/api/imports/pos-excel', { method: 'POST', body: form }),
+  )
+}
+
 export type RefItem = {
   id: string
   name: string
   count: number
   years?: Record<string, number>
+  months?: Record<string, Record<string, number>>
 }
 export type Rubric = RefItem & { code?: string; theme?: string }
-export type Theme = RefItem & { description?: string }
+export type Theme = RefItem & { code?: string; description?: string }
 export type Source = RefItem & { status?: string }
+export type DepartmentProfile = RefItem & { short?: string }
+export type DepartmentRef = RefItem & { profile?: string }
 
 export type References = {
   generatedAt: string
@@ -183,7 +327,8 @@ export type References = {
   rubrics: Rubric[]
   themes: Theme[]
   sources: Source[]
-  departments: RefItem[]
+  profiles: DepartmentProfile[]
+  departments: DepartmentRef[]
   comparison: {
     currentYear: number
     previousYear: number
@@ -203,6 +348,7 @@ function normalizeRefItems<T extends RefItem>(
       name: stringValue(item.name) || 'Не указано',
       count: numberValue(item.count),
       years: objectValue(item.years) as Record<string, number>,
+      months: objectValue(item.months) as Record<string, Record<string, number>>,
     } as T
   })
 }
@@ -217,7 +363,8 @@ export async function fetchReferences(mode: AppealMode): Promise<References> {
     rubrics: normalizeRefItems<Rubric>(raw.rubrics),
     themes: normalizeRefItems<Theme>(raw.themes),
     sources: normalizeRefItems<Source>(raw.sources),
-    departments: normalizeRefItems<RefItem>(raw.departments),
+    profiles: normalizeRefItems<DepartmentProfile>(raw.profiles),
+    departments: normalizeRefItems<DepartmentRef>(raw.departments),
     comparison: {
       currentYear: numberValue(objectValue(raw.comparison).currentYear),
       previousYear: numberValue(objectValue(raw.comparison).previousYear),

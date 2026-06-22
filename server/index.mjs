@@ -7,12 +7,9 @@ import Fastify from 'fastify'
 import {
   buildDashboardData,
   isGratitudeRecord,
-  normalizeManualRecord,
   selectComparablePeriod,
 } from '../scripts/complaints-parser.mjs'
 import {
-  buildAppealsAnalytics,
-  buildAppealsGraph,
   buildReferenceData,
   createAppealsStore,
   mergeExcelRowsIntoStore,
@@ -21,11 +18,8 @@ import {
   pickManualFields,
   readAppealExcelRows,
 } from '../scripts/appeals-store.mjs'
-import {
-  buildComparisonReport as buildStrictComparisonReport,
-  normalizeExcelRows as normalizeComparisonExcelRows,
-  readExcelRows as readComparisonExcelRows,
-} from '../scripts/complaints-parser-strict.mjs'
+import { syncAnnotationTimestamps } from '../scripts/appeal-annotations.mjs'
+import { createPosRepository } from '../scripts/pos-store.mjs'
 
 const rootDir = process.cwd()
 const dataDir = process.env.DATA_DIR
@@ -36,6 +30,8 @@ const uploadDir = process.env.UPLOAD_DIR
   : path.join(rootDir, 'uploads')
 const storeFile = path.join(dataDir, 'complaints-store.json')
 const initialExcelFile = path.join(rootDir, 'statistic.xls')
+const posSeedFile = path.join(rootDir, 'pos-seed.xlsx')
+const posRepo = createPosRepository({ dataDir, seedFile: posSeedFile })
 const port = Number(process.env.API_PORT ?? 4000)
 const host = process.env.API_HOST ?? '127.0.0.1'
 const isProduction = process.env.NODE_ENV === 'production'
@@ -137,16 +133,6 @@ app.get('/api/dashboard', async (request) => {
   })
 })
 
-app.get('/api/analytics', async (request) => {
-  const store = await readStore()
-  return buildAppealsAnalytics(store.records, getFilters(request.query))
-})
-
-app.get('/api/graph', async (request) => {
-  const store = await readStore()
-  return buildAppealsGraph(store.records, getFilters(request.query))
-})
-
 app.get('/api/references', async (request) => {
   const store = await readStore()
   const mode = getAppealModeFilter(request.query?.mode)
@@ -240,43 +226,6 @@ function buildChannelReferences(records) {
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru'))
 }
 
-app.post('/api/appeals', async (request, reply) => {
-  const record = normalizeManualRecord(request.body ?? {})
-
-  if (!record.content) {
-    return reply.code(400).send({ error: 'content is required' })
-  }
-
-  await mutateStore((store) => {
-    assertUniqueAppealIds(store.records, [record])
-    store.records.push(record)
-  })
-
-  return reply.code(201).send({ item: record })
-})
-
-app.post('/api/appeals/bulk', async (request, reply) => {
-  const items = Array.isArray(request.body?.items) ? request.body.items : []
-
-  if (!items.length) {
-    return reply.code(400).send({ error: 'items array is required and cannot be empty' })
-  }
-  if (items.length > 10_000) {
-    return reply.code(400).send({ error: 'items array is too large' })
-  }
-
-  const newRecords = items.map(item => normalizeManualRecord(item))
-  if (newRecords.some((record) => !record.content)) {
-    return reply.code(400).send({ error: 'content is required for every item' })
-  }
-  await mutateStore((store) => {
-    assertUniqueAppealIds(store.records, newRecords)
-    store.records.push(...newRecords)
-  })
-
-  return reply.code(201).send({ count: newRecords.length })
-})
-
 app.patch('/api/appeals', async (request, reply) => {
   const { uid, id, appealKey, isJustified } = request.body ?? {}
 
@@ -325,20 +274,7 @@ app.patch('/api/appeals', async (request, reply) => {
       ...manualFields,
     }
     if (hasAnnotationPatch) {
-      const hasAnnotation =
-        current.manualFields?.isJustified !== undefined ||
-        Boolean(String(current.manualFields?.notes ?? '').trim()) ||
-        Boolean(String(current.manualFields?.issues ?? '').trim()) ||
-        Boolean(current.manualFields?.departments?.length)
-
-      if (hasAnnotation) {
-        current.manualFields.annotationCreatedAt =
-          current.manualFields.annotationCreatedAt || now
-        current.manualFields.annotationUpdatedAt = now
-      } else {
-        delete current.manualFields?.annotationCreatedAt
-        delete current.manualFields?.annotationUpdatedAt
-      }
+      syncAnnotationTimestamps(current.manualFields, now)
     }
     current.updatedAt = now
     current.normalized = {
@@ -357,11 +293,6 @@ app.patch('/api/appeals', async (request, reply) => {
   }
 
   return { item: record }
-})
-
-app.get('/api/imports', async () => {
-  const store = await readStore()
-  return { items: store.imports.slice().reverse() }
 })
 
 app.post('/api/imports/excel', async (request, reply) => {
@@ -407,54 +338,70 @@ app.post('/api/imports/excel', async (request, reply) => {
   }
 })
 
-app.post('/api/reports/comparison', async (request, reply) => {
-  const uploads = {}
-  let institution = 'БУ СОКБ'
+app.get('/api/pos', async () => {
+  return posRepo.list()
+})
 
-  for await (const part of request.parts()) {
-    if (part.type === 'file') {
-      uploads[part.fieldname] = {
-        filename: sanitizeFilename(part.filename || `${part.fieldname}.xls`),
-        buffer: await part.toBuffer(),
-      }
-      continue
-    }
+app.patch('/api/pos', async (request, reply) => {
+  const uid = String(request.body?.uid ?? '')
+  if (!uid) {
+    return reply.code(400).send({ error: 'uid is required' })
+  }
+  const record = await posRepo.patch(request.body ?? {})
+  if (!record) {
+    return reply.code(404).send({ error: 'pos message not found' })
+  }
+  return { item: record }
+})
 
-    if (part.fieldname === 'institution') {
-      institution = String(part.value || '').trim() || institution
-    }
+app.post('/api/imports/pos-excel', async (request, reply) => {
+  const file = await request.file()
+  if (!file) {
+    return reply.code(400).send({ error: 'file is required' })
   }
 
-  if (!uploads.currentFile || !uploads.previousFile) {
-    return reply
-      .code(400)
-      .send({ error: 'currentFile and previousFile are required' })
-  }
+  const buffer = await file.toBuffer()
+  const importId = crypto.randomUUID()
+  const safeFilename = sanitizeFilename(file.filename || 'pos.xlsx')
+  const storedFilename = `${new Date().toISOString().replace(/[:.]/g, '-')}-${safeFilename}`
 
-  const currentRecords = normalizeComparisonExcelRows(
-    readComparisonExcelRows(uploads.currentFile.buffer),
-    {
-      sourceFile: uploads.currentFile.filename,
-      importId: crypto.randomUUID(),
-    }
-  )
-  const previousRecords = normalizeComparisonExcelRows(
-    readComparisonExcelRows(uploads.previousFile.buffer),
-    {
-      sourceFile: uploads.previousFile.filename,
-      importId: crypto.randomUUID(),
-    }
-  )
-
-  return buildStrictComparisonReport(currentRecords, previousRecords, {
-    institution,
-    currentSourceFile: uploads.currentFile.filename,
-    previousSourceFile: uploads.previousFile.filename,
+  const result = await posRepo.import(buffer, {
+    importId,
+    sourceFile: safeFilename,
+    storedFilename,
   })
+
+  if (result?.empty) {
+    const headers = Array.isArray(result.headers) ? result.headers : []
+    const foundHeaders = headers.length ? headers.join(', ') : 'не найдены'
+    return reply.code(400).send({
+      error:
+        result.rowsCount > 0
+          ? `Файл не похож на выгрузку ПОС: не найдены строки с колонкой «Номер». Найденные заголовки: ${foundHeaders}`
+          : 'Excel file does not contain recognized ПОС rows',
+      rowsCount: result.rowsCount ?? 0,
+      headers,
+    })
+  }
+
+  await fs.mkdir(uploadDir, { recursive: true })
+  await fs.writeFile(path.join(uploadDir, storedFilename), buffer)
+
+  return {
+    importId,
+    uploadedAt: new Date().toISOString(),
+    rowsCount: result.importedRecords.length,
+    addedCount: result.addedCount,
+    updatedCount: result.updatedCount,
+    removedCount: result.removedCount,
+    manualFieldsPreserved: result.preservedManualFieldsCount,
+    existingRecordsKept: result.keptExistingCount,
+  }
 })
 
 await ensureStore()
 await migrateStoreFile()
+await posRepo.ensure()
 await app.listen({ port, host })
 
 async function ensureStore() {
@@ -584,18 +531,6 @@ function findStoreRecord(store, { uid, id, appealKey }) {
   return undefined
 }
 
-function assertUniqueAppealIds(existingRecords, newRecords) {
-  const ids = new Set(existingRecords.map((record) => record.id).filter(Boolean))
-  for (const record of newRecords) {
-    if (ids.has(record.id)) {
-      const error = new Error(`appeal id already exists: ${record.id}`)
-      error.statusCode = 409
-      throw error
-    }
-    ids.add(record.id)
-  }
-}
-
 function sanitizeFilename(filename) {
   return filename.replace(/[^\p{L}\p{N}._-]+/gu, '_')
 }
@@ -609,15 +544,6 @@ async function readInitialExcelRecords() {
     })
   } catch {
     return []
-  }
-}
-
-function getFilters(query = {}) {
-  return {
-    from: cleanQueryValue(query.from),
-    to: cleanQueryValue(query.to),
-    applicant: cleanQueryValue(query.applicant),
-    department: cleanQueryValue(query.department),
   }
 }
 
