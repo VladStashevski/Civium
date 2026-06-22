@@ -19,6 +19,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   number: 'Номер',
   epguNumber: 'Номер ЕПГУ',
   dateIso: 'Поступило',
+  year: 'Год',
   source: 'Источник',
   category: 'Категория',
   subcategory: 'Подкатегория',
@@ -122,6 +123,17 @@ export const columns: ColumnDef<PosMessage>[] = [
     maxSize: 150,
     header: ({ column }) => <SortHeader column={column}>Поступило</SortHeader>,
     cell: ({ row }) => <DateCell iso={row.original.dateIso} />,
+  },
+  {
+    id: 'year',
+    accessorFn: (m) => String(m.year || ''),
+    header: ({ column }) => <SortHeader column={column}>Год</SortHeader>,
+    filterFn: inArray,
+    cell: ({ row }) => (
+      <span className="block text-center tabular-nums whitespace-nowrap text-muted-foreground">
+        {row.original.year || '—'}
+      </span>
+    ),
   },
   {
     accessorKey: 'source',
@@ -342,6 +354,7 @@ export const columns: ColumnDef<PosMessage>[] = [
 
 // По умолчанию — компактный набор под ноутбук. Остальное включается «Колонками».
 export const DEFAULT_HIDDEN: VisibilityState = {
+  year: false,
   fact: false,
   status: false,
   stage: false,
@@ -362,6 +375,7 @@ export const COLUMN_MIN_WIDTHS: Record<string, number> = {
   number: 120,
   epguNumber: 120,
   dateIso: 110,
+  year: 90,
   source: 140,
   category: 130,
   subcategory: 160,

@@ -1,20 +1,49 @@
+import { CiviumLogo } from '@/components/civium-logo'
+
 export function LoginArt() {
   return (
-    <div className="relative hidden items-center justify-center overflow-hidden bg-primary p-12 lg:flex">
+    <div className="relative hidden items-center justify-center overflow-hidden bg-primary p-12 text-primary-foreground lg:flex">
+      {/* свечение из правого-верхнего угла */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_55%_at_82%_12%,rgba(255,255,255,0.22),transparent_70%)]"
+      />
+      {/* точечная сетка с мягким затуханием к краям */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-50 [background-image:radial-gradient(rgba(255,255,255,0.16)_1px,transparent_1px)] [background-size:22px_22px] [mask-image:radial-gradient(80%_80%_at_50%_45%,#000,transparent)]"
+      />
+      {/* фирменный знак как фоновый элемент в правом верхнем углу;
+          столбики поочерёдно «вырастают» */}
+      <CiviumLogo
+        animated
+        aria-hidden
+        className="pointer-events-none absolute -top-24 -right-16 size-[34rem] text-white/[0.09]"
+      />
+
+      {/* основная иллюстрация */}
       <svg
         viewBox="0 0 420 360"
-        className="w-full max-w-md"
+        className="relative z-10 w-full max-w-md"
         fill="none"
         role="img"
         aria-label="Обработка обращений граждан"
       >
-        {/* декоративные элементы */}
+        {/* орбиты */}
         <circle cx="210" cy="180" r="168" stroke="#fff" strokeOpacity="0.08" strokeWidth="2" />
         <circle cx="210" cy="180" r="120" stroke="#fff" strokeOpacity="0.07" strokeWidth="2" />
-        <circle cx="64" cy="118" r="5" fill="#fff" fillOpacity="0.55" />
-        <circle cx="356" cy="150" r="4" fill="#fff" fillOpacity="0.45" />
-        <circle cx="92" cy="300" r="6" fill="#fff" fillOpacity="0.4" />
-        <circle cx="338" cy="296" r="4" fill="#fff" fillOpacity="0.5" />
+
+        {/* узлы вращаются по орбите вокруг центра (в разные стороны) */}
+        <g className="civium-orbit">
+          <circle cx="306" cy="42" r="5" fill="#fff" fillOpacity="0.55" />
+          <circle cx="52" cy="123" r="4" fill="#fff" fillOpacity="0.45" />
+          <circle cx="153" cy="338" r="5" fill="#fff" fillOpacity="0.4" />
+        </g>
+        <g className="civium-orbit-reverse">
+          <circle cx="345" cy="258" r="4" fill="#fff" fillOpacity="0.5" />
+          <circle cx="157" cy="33" r="5" fill="#fff" fillOpacity="0.45" />
+          <circle cx="63" cy="233" r="3" fill="#fff" fillOpacity="0.4" />
+        </g>
 
         {/* задний лист */}
         <g transform="rotate(-7 210 185)">
@@ -41,15 +70,25 @@ export function LoginArt() {
         <rect x="202" y="226" width="22" height="56" rx="4" fill="#3b82f6" />
         <rect x="232" y="240" width="22" height="42" rx="4" fill="#2563eb" />
 
-        {/* конверт сверху-справа */}
+        {/* конверт сверху-справа — парит в своём ритме */}
         <g transform="translate(244 40) rotate(8)">
-          <rect x="0" y="0" width="98" height="70" rx="12" fill="#fff" />
-          <path d="M10 14 L49 46 L88 14" stroke="#bfdbfe" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+          <g
+            className="civium-float"
+            style={{ animationDuration: '6.5s', animationDelay: '0s' }}
+          >
+            <rect x="0" y="0" width="98" height="70" rx="12" fill="#fff" stroke="#cbd5e1" strokeWidth="2" />
+            <path d="M10 14 L49 46 L88 14" stroke="#93c5fd" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
         </g>
 
-        {/* бейдж «обработано» */}
-        <circle cx="298" cy="276" r="30" fill="#10b981" />
-        <path d="M285 277 l9 9 l17 -19" stroke="#fff" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+        {/* бейдж «обработано» — парит иначе, не в такт конверту */}
+        <g
+          className="civium-float"
+          style={{ animationDuration: '4.4s', animationDelay: '1.1s' }}
+        >
+          <circle cx="298" cy="276" r="30" fill="#10b981" />
+          <path d="M285 277 l9 9 l17 -19" stroke="#fff" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
       </svg>
     </div>
   )

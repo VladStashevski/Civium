@@ -1,7 +1,7 @@
 // Стор ПОС: отдельный от обращений файл data/pos-store.json. Модуль сам владеет
 // вводом-выводом (кэш + очередь мутаций + атомарная запись) и сидом из выгрузки,
 // чтобы server/index.mjs оставался тонким. Аннотации (manualFields) переживают
-// повторный импорт по ключу «Номер».
+// повторный импорт по ключу «Номер», а база обогащается новыми выгрузками.
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -53,8 +53,9 @@ export function pickPosManualFields(input = {}) {
 }
 
 /**
- * Импорт = новый excel-набор: записи из файла заменяют прежние, но manualFields
- * переносятся по ключу «Номер» (uid). Возвращает новый стор и счётчики.
+ * Импорт = пополнение общей базы: записи из файла добавляются или обновляют
+ * прежние по ключу «Номер» (uid). Старые записи, которых нет в текущем файле,
+ * остаются в базе вместе с manualFields.
  */
 export function mergePosRecords(store, records, meta = {}) {
   const currentStore = migratePosStore(store)
@@ -63,7 +64,11 @@ export function mergePosRecords(store, records, meta = {}) {
 
   // дедупликация внутри самого импорта — последняя строка с тем же номером побеждает
   const importedByKey = new Map()
-  for (const record of records) importedByKey.set(record.uid, record)
+  let duplicateCount = 0
+  for (const record of records) {
+    if (importedByKey.has(record.uid)) duplicateCount += 1
+    importedByKey.set(record.uid, record)
+  }
   const importedRecords = [...importedByKey.values()]
 
   const existingByKey = new Map(
@@ -74,7 +79,9 @@ export function mergePosRecords(store, records, meta = {}) {
   let updatedCount = 0
   let preservedManualFieldsCount = 0
 
-  const merged = importedRecords.map((record) => {
+  const importedKeys = new Set()
+  const mergedImported = importedRecords.map((record) => {
+    importedKeys.add(record.uid)
     const previous = existingByKey.get(record.uid)
     const manualFields = previous?.manualFields ?? {}
     if (previous) updatedCount += 1
@@ -85,37 +92,65 @@ export function mergePosRecords(store, records, meta = {}) {
       importId,
       sourceFile,
       manualFields,
+      importHistory: [
+        ...(previous?.importHistory ?? []),
+        {
+          importId,
+          filename: sourceFile,
+          rowNumber: record.rowNumber,
+          importedAt: now,
+        },
+      ],
       createdAt: previous?.createdAt || now,
       updatedAt: now,
+      lastSeenImportId: importId,
     }
   })
 
-  const removedCount = currentStore.records.length - updatedCount
+  const keptExistingRecords = currentStore.records.filter(
+    (record) => !importedKeys.has(record.uid),
+  )
+  const removedCount = keptExistingRecords.length
 
   const nextStore = {
     ...currentStore,
     updatedAt: now,
-    records: merged,
+    records: [...mergedImported, ...keptExistingRecords].sort(comparePosRecords),
     imports: [
       ...currentStore.imports,
       {
         id: importId,
         filename: sourceFile,
         uploadedAt: now,
-        rowsCount: merged.length,
+        rowsCount: records.length,
+        uniqueRowsCount: importedRecords.length,
+        duplicateCount,
+        addedCount,
+        updatedCount,
+        removedCount,
+        preservedManualFieldsCount,
       },
     ],
   }
 
   return {
     store: nextStore,
-    importedRecords: merged,
+    importedRecords,
+    importedRowsCount: records.length,
     addedCount,
     updatedCount,
     removedCount,
+    duplicateCount,
     preservedManualFieldsCount,
-    keptExistingCount: updatedCount,
+    keptExistingCount: keptExistingRecords.length,
   }
+}
+
+function comparePosRecords(a, b) {
+  return (
+    String(b.dateIso ?? '').localeCompare(String(a.dateIso ?? '')) ||
+    String(b.uid ?? '').localeCompare(String(a.uid ?? ''))
+  )
 }
 
 /**

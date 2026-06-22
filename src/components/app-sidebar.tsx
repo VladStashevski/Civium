@@ -2,7 +2,6 @@ import * as React from 'react'
 import { Link, useLocation } from '@tanstack/react-router'
 import {
   BuildingsIcon,
-  ChartBarIcon,
   ChatsCircleIcon,
   DatabaseIcon,
   ListIcon,
@@ -11,6 +10,7 @@ import {
   StethoscopeIcon,
 } from '@phosphor-icons/react'
 
+import { CiviumLogo } from '@/components/civium-logo'
 import { NavMain, type NavItem } from '@/components/nav-main'
 import { NavUser } from '@/components/nav-user'
 import {
@@ -74,10 +74,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 className="w-fit max-w-full data-[slot=sidebar-menu-button]:p-1.5!"
               >
                 <Link to="/" search={{ mode: appealMode }}>
-                  <ChartBarIcon
-                    className="size-5! text-primary"
-                    weight="duotone"
-                  />
+                  <CiviumLogo className="size-5! text-primary" />
                   <span className="text-base font-semibold">Civium</span>
                 </Link>
               </SidebarMenuButton>

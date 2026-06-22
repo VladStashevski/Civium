@@ -84,6 +84,10 @@ export function PosTable() {
     () => uniqueOptions(rows, (m) => m.source),
     [rows],
   )
+  const yearOptions = React.useMemo(
+    () => uniqueOptions(rows, (m) => String(m.year || '')),
+    [rows],
+  )
   const categoryOptions = React.useMemo(
     () => uniqueOptions(rows, (m) => m.category),
     [rows],
@@ -208,6 +212,7 @@ export function PosTable() {
           <PosToolbar
             table={table}
             sourceOptions={sourceOptions}
+            yearOptions={yearOptions}
             categoryOptions={categoryOptions}
             subcategoryOptions={subcategoryOptions}
             statusOptions={statusOptions}

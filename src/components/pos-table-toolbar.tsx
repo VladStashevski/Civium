@@ -22,6 +22,7 @@ import type { PosMessage } from '@/lib/api'
 export function PosToolbar({
   table,
   sourceOptions,
+  yearOptions,
   categoryOptions,
   subcategoryOptions,
   statusOptions,
@@ -29,6 +30,7 @@ export function PosToolbar({
 }: {
   table: Table<PosMessage>
   sourceOptions: FacetOption[]
+  yearOptions: FacetOption[]
   categoryOptions: FacetOption[]
   subcategoryOptions: FacetOption[]
   statusOptions: FacetOption[]
@@ -49,6 +51,11 @@ export function PosToolbar({
         column={table.getColumn('source')}
         title="Источник"
         options={sourceOptions}
+      />
+      <FacetedFilter
+        column={table.getColumn('year')}
+        title="Год"
+        options={yearOptions}
       />
       <FacetedFilter
         column={table.getColumn('category')}

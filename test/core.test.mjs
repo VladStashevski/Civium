@@ -435,7 +435,7 @@ test('pos import recognizes feedback platform export headers', () => {
   assert.equal(records[0].rating, 5)
 })
 
-test('pos reimport replaces snapshot and preserves manual fields', () => {
+test('pos reimport enriches shared store and preserves manual fields', () => {
   const first = mergePosRecords(
     { records: [], imports: [] },
     [
@@ -464,9 +464,10 @@ test('pos reimport replaces snapshot and preserves manual fields', () => {
   assert.equal(second.updatedCount, 1)
   assert.equal(second.removedCount, 1)
   assert.equal(second.preservedManualFieldsCount, 1)
+  assert.equal(second.keptExistingCount, 1)
   assert.deepEqual(
     second.store.records.map((record) => record.uid).sort(),
-    ['100', '300'],
+    ['100', '200', '300'],
   )
   assert.equal(
     second.store.records.find((record) => record.uid === '100').manualFields.notes,
