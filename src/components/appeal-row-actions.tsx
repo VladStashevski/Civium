@@ -31,6 +31,13 @@ export function justifiedToValue(v: boolean | undefined): string {
   return v === true ? 'yes' : v === false ? 'no' : 'none'
 }
 
+// Проверка по обращению: проводилась ли ВНК (внутренний контроль качества) или
+// служебная проверка. Взаимоисключающий выбор; по умолчанию — не проводилась
+// (хранится как отсутствие поля, в форме — состояние 'none').
+export function inspectionLabel(value: unknown): string {
+  return value === 'vnk' ? 'ВНК' : value === 'service' ? 'Служебная' : ''
+}
+
 function formatAnnotationDate(value: unknown) {
   if (typeof value !== 'string' || !value) return ''
   const date = new Date(value)
@@ -406,12 +413,14 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
   const { mutate, isPending } = usePatchAppeal()
   const [open, setOpen] = React.useState(false)
   const [justified, setJustified] = React.useState('none')
+  const [inspection, setInspection] = React.useState('none')
   const [notes, setNotes] = React.useState('')
   const [issues, setIssues] = React.useState('')
   const [departments, setDepartments] = React.useState<string[]>([])
 
   const openEditor = () => {
     setJustified(justifiedToValue(appeal.manualFields?.isJustified))
+    setInspection(appeal.manualFields?.inspection || 'none')
     setNotes(appeal.manualFields?.notes ?? '')
     setIssues(appeal.manualFields?.issues ?? '')
     setDepartments(appeal.manualFields?.departments ?? [])
@@ -420,6 +429,7 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
 
   const hasAnnotation =
     appeal.manualFields?.isJustified !== undefined ||
+    Boolean(appeal.manualFields?.inspection) ||
     Boolean(appeal.manualFields?.notes) ||
     Boolean(appeal.manualFields?.issues) ||
     Boolean(appeal.manualFields?.departments?.length)
@@ -433,6 +443,7 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
         uid: appeal.uid,
         isJustified:
           justified === 'yes' ? true : justified === 'no' ? false : null,
+        inspection: inspection === 'none' ? '' : inspection,
         notes,
         issues,
         departments,
@@ -506,6 +517,39 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
               </ToggleGroupItem>
             </ToggleGroup>
 
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                Проверка
+              </span>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                spacing={0}
+                value={inspection}
+                onValueChange={(v) => v && setInspection(v)}
+                className="w-full"
+              >
+                <ToggleGroupItem
+                  value="none"
+                  className="h-9 flex-1 text-sm data-[state=on]:bg-muted data-[state=on]:text-foreground"
+                >
+                  Не проводилась
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="vnk"
+                  className="h-9 flex-1 text-sm hover:bg-inspection-vnk/10 hover:text-inspection-vnk data-[state=on]:border-inspection-vnk/40 data-[state=on]:bg-inspection-vnk/10 data-[state=on]:text-inspection-vnk"
+                >
+                  ВНК
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="service"
+                  className="h-9 flex-1 text-sm hover:bg-inspection-service/15 hover:text-inspection-service data-[state=on]:border-inspection-service/40 data-[state=on]:bg-inspection-service/15 data-[state=on]:text-inspection-service"
+                >
+                  Служебная
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+
             <DepartmentSelect value={departments} onChange={setDepartments} />
 
             <div className="grid min-w-0 gap-2 md:grid-cols-2">
@@ -533,6 +577,7 @@ export function AppealRowActions({ appeal }: { appeal: Appeal }) {
                     {
                       uid: appeal.uid,
                       isJustified: null,
+                      inspection: '',
                       notes: '',
                       issues: '',
                       departments: [],

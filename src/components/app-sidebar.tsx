@@ -4,6 +4,7 @@ import {
   BuildingsIcon,
   ChatsCircleIcon,
   DatabaseIcon,
+  FlaskIcon,
   ListIcon,
   PresentationChartIcon,
   SquaresFourIcon,
@@ -42,6 +43,7 @@ const appealsNav: NavItem[] = [
   { title: 'Обращения', url: '/appeals', icon: <ListIcon /> },
   { title: 'Справочники', url: '/references', icon: <DatabaseIcon /> },
   { title: 'Слайды', url: '/slides', icon: <PresentationChartIcon /> },
+  { title: 'Экспериментальные функции', url: '/experiments', icon: <FlaskIcon /> },
 ]
 
 const posNav: NavItem[] = [

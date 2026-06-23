@@ -245,7 +245,7 @@ app.patch('/api/appeals', async (request, reply) => {
     } else if (isJustified !== undefined) {
       manualFields.isJustified = Boolean(isJustified)
     }
-    for (const key of ['responsible', 'notes', 'issues']) {
+    for (const key of ['responsible', 'notes', 'issues', 'inspection']) {
       if (request.body?.[key] !== undefined && !String(request.body[key]).trim()) {
         delete current.manualFields?.[key]
         delete manualFields[key]
@@ -265,6 +265,7 @@ app.patch('/api/appeals', async (request, reply) => {
 
     const hasAnnotationPatch =
       request.body?.isJustified !== undefined ||
+      request.body?.inspection !== undefined ||
       request.body?.notes !== undefined ||
       request.body?.issues !== undefined ||
       request.body?.departments !== undefined

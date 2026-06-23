@@ -11,7 +11,14 @@ import type { AppealMode } from '@/lib/api'
 
 export type NavItem = {
   title: string
-  url: '/' | '/appeals' | '/references' | '/slides' | '/pos' | '/pos-table'
+  url:
+    | '/'
+    | '/appeals'
+    | '/references'
+    | '/slides'
+    | '/experiments'
+    | '/pos'
+    | '/pos-table'
   icon?: ReactNode
 }
 

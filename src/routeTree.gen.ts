@@ -14,6 +14,7 @@ import { Route as ReferencesRouteImport } from './routes/references'
 import { Route as PosTableRouteImport } from './routes/pos-table'
 import { Route as PosRouteImport } from './routes/pos'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ExperimentsRouteImport } from './routes/experiments'
 import { Route as AppealsRouteImport } from './routes/appeals'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -42,6 +43,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ExperimentsRoute = ExperimentsRouteImport.update({
+  id: '/experiments',
+  path: '/experiments',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppealsRoute = AppealsRouteImport.update({
   id: '/appeals',
   path: '/appeals',
@@ -56,6 +62,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/appeals': typeof AppealsRoute
+  '/experiments': typeof ExperimentsRoute
   '/login': typeof LoginRoute
   '/pos': typeof PosRoute
   '/pos-table': typeof PosTableRoute
@@ -65,6 +72,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/appeals': typeof AppealsRoute
+  '/experiments': typeof ExperimentsRoute
   '/login': typeof LoginRoute
   '/pos': typeof PosRoute
   '/pos-table': typeof PosTableRoute
@@ -75,6 +83,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/appeals': typeof AppealsRoute
+  '/experiments': typeof ExperimentsRoute
   '/login': typeof LoginRoute
   '/pos': typeof PosRoute
   '/pos-table': typeof PosTableRoute
@@ -86,6 +95,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/appeals'
+    | '/experiments'
     | '/login'
     | '/pos'
     | '/pos-table'
@@ -95,6 +105,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/appeals'
+    | '/experiments'
     | '/login'
     | '/pos'
     | '/pos-table'
@@ -104,6 +115,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/appeals'
+    | '/experiments'
     | '/login'
     | '/pos'
     | '/pos-table'
@@ -114,6 +126,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppealsRoute: typeof AppealsRoute
+  ExperimentsRoute: typeof ExperimentsRoute
   LoginRoute: typeof LoginRoute
   PosRoute: typeof PosRoute
   PosTableRoute: typeof PosTableRoute
@@ -158,6 +171,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/experiments': {
+      id: '/experiments'
+      path: '/experiments'
+      fullPath: '/experiments'
+      preLoaderRoute: typeof ExperimentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/appeals': {
       id: '/appeals'
       path: '/appeals'
@@ -178,6 +198,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppealsRoute: AppealsRoute,
+  ExperimentsRoute: ExperimentsRoute,
   LoginRoute: LoginRoute,
   PosRoute: PosRoute,
   PosTableRoute: PosTableRoute,

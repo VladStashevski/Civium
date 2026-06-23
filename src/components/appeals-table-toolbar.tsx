@@ -1,6 +1,7 @@
 import type { Column, Table } from '@tanstack/react-table'
 import { SlidersHorizontalIcon, XIcon } from '@phosphor-icons/react'
 
+import { DateRangeFilter } from '@/components/appeals-date-range-filter'
 import { FacetedFilter, type FacetOption } from '@/components/appeals-faceted-filter'
 import {
   COLUMN_LABELS,
@@ -62,6 +63,7 @@ export function AppealsToolbar({
         title="Год"
         options={yearOptions}
       />
+      <DateRangeFilter column={table.getColumn('dateIso')} title="Период" />
       {mode === 'external' && (
         <FacetedFilter
           column={table.getColumn('registrationRoute')}

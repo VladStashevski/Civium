@@ -25,8 +25,10 @@ export type Appeal = {
   isChiefDoctor: boolean
   isRedirected: boolean
   departments: string[]
+  deadlineStatus?: string
   manualFields?: {
     isJustified?: boolean
+    inspection?: string
     notes?: string
     issues?: string
     departments?: string[]
@@ -45,6 +47,7 @@ export type AppealsResponse = {
 export type AppealPatch = {
   uid: string
   isJustified?: boolean | null
+  inspection?: string
   notes?: string
   issues?: string
   departments?: string[]
@@ -129,6 +132,7 @@ function normalizeAppeal(value: unknown): Appeal {
     isChiefDoctor: appealMode === 'chiefDoctor',
     isRedirected: appealMode === 'external',
     departments: stringArray(item.departments),
+    deadlineStatus: stringValue(item.deadlineStatus) || undefined,
     manualFields: {
       ...manualFields,
       departments: stringArray(manualFields.departments),

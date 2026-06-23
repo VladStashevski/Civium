@@ -24,6 +24,9 @@
     /* Семантические токены: динамика «вниз/хорошо» и акцент источников */
     --color-positive: var(--positive);
     --color-accent-source: var(--accent-source);
+    /* Типы проверки по обращению: ВНК — фиолетовый, служебная — янтарный */
+    --color-inspection-vnk: var(--inspection-vnk);
+    --color-inspection-service: var(--inspection-service);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -80,6 +83,9 @@
     --positive: oklch(0.596 0.145 163);
     /* Акцент распределения по источникам внешних контуров — фиолетовый (violet ~500) */
     --accent-source: oklch(0.606 0.25 292);
+    /* Типы проверки: ВНК — фиолетовый (violet ~600), служебная — янтарный (amber ~600) */
+    --inspection-vnk: oklch(0.554 0.224 295);
+    --inspection-service: oklch(0.62 0.16 63);
     --radius: 0.875rem;
     --sidebar: oklch(0.975 0.002 286.32);
     --sidebar-foreground: oklch(0.141 0.005 285.823);
@@ -119,6 +125,9 @@
     /* В тёмной теме светлее для контраста на тёмной подложке (emerald ~400 / violet ~400) */
     --positive: oklch(0.765 0.177 163);
     --accent-source: oklch(0.71 0.2 293);
+    /* В тёмной теме светлее (violet ~400 / amber ~400) */
+    --inspection-vnk: oklch(0.72 0.18 295);
+    --inspection-service: oklch(0.79 0.15 70);
     --sidebar: oklch(0.21 0.006 285.885);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.623 0.214 259.815);

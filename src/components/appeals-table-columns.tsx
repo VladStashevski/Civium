@@ -7,7 +7,7 @@ import type {
 } from '@tanstack/react-table'
 import { CaretUpDownIcon } from '@phosphor-icons/react'
 
-import { AppealRowActions } from '@/components/appeal-row-actions'
+import { AppealRowActions, inspectionLabel } from '@/components/appeal-row-actions'
 import { TruncatedCell } from '@/components/appeals-table-cell'
 import type { FacetOption } from '@/components/appeals-faceted-filter'
 import { Badge } from '@/components/ui/badge'
@@ -30,11 +30,17 @@ export const COLUMN_LABELS: Record<string, string> = {
   departmentProfile: 'Профиль отделения',
   departments: 'Отделения',
   justified: 'Обоснованность',
+  inspection: 'Проверка',
   issues: 'Проблемы',
   notes: 'Комментарий',
 }
 
 export const CENTERED_COLUMN_IDS = new Set(['dateIso', 'sourceView'])
+
+export type DateRangeFilterValue = {
+  from?: string
+  to?: string
+}
 
 /**
  * Ширины колонок заданы в px (как при базовом font-size 16px), но рендерятся в rem,
@@ -76,6 +82,18 @@ const intersectsArray: FilterFn<Appeal> = (row, columnId, value) => {
   return rowValues.some((item) => selected.includes(item))
 }
 
+const inDateRange: FilterFn<Appeal> = (row, columnId, value) => {
+  const range = value as DateRangeFilterValue | undefined
+  if (!range?.from && !range?.to) return true
+
+  const date = String(row.getValue(columnId) ?? '')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false
+
+  if (range.from && date < range.from) return false
+  if (range.to && date > range.to) return false
+  return true
+}
+
 function SortHeader({
   column,
   children,
@@ -115,6 +133,7 @@ export const columns: ColumnDef<Appeal>[] = [
     minSize: 110,
     maxSize: 150,
     header: ({ column }) => <SortHeader column={column}>Дата</SortHeader>,
+    filterFn: inDateRange,
     cell: ({ row }) => (
       <span className="block text-center tabular-nums whitespace-nowrap text-muted-foreground">
         {formatDateShort(row.original.dateIso)}
@@ -278,6 +297,31 @@ export const columns: ColumnDef<Appeal>[] = [
     },
   },
   {
+    id: 'inspection',
+    size: 150,
+    minSize: 150,
+    maxSize: 150,
+    accessorFn: (a) => inspectionLabel(a.manualFields?.inspection),
+    header: ({ column }) => <SortHeader column={column}>Проверка</SortHeader>,
+    filterFn: inArray,
+    cell: ({ row }) => {
+      const inspection = row.original.manualFields?.inspection
+      const label = inspectionLabel(inspection)
+      if (!label) return <span className="text-muted-foreground/60">—</span>
+      return (
+        <Badge
+          className={
+            inspection === 'vnk'
+              ? 'border-transparent bg-inspection-vnk/10 text-inspection-vnk'
+              : 'border-transparent bg-inspection-service/15 text-inspection-service'
+          }
+        >
+          {label}
+        </Badge>
+      )
+    },
+  },
+  {
     id: 'issues',
     size: 210,
     minSize: 170,
@@ -348,6 +392,7 @@ export const COLUMN_MIN_WIDTHS: Record<string, number> = {
   departmentProfile: 170,
   departments: 170,
   justified: 220,
+  inspection: 150,
   issues: 170,
   notes: 170,
   actions: 52,

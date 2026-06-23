@@ -344,10 +344,7 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                   <Table className="table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-1/3">
-                          Источник
-                        </TableHead>
-                        <TableHead>Статус</TableHead>
+                        <TableHead>Источник</TableHead>
                         {comparisonHeaders}
                       </TableRow>
                     </TableHeader>
@@ -355,10 +352,6 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                       {byCurrentYear(sources, currentYear).map((s) => (
                         <TableRow key={s.id}>
                           <TextCell value={s.name} className="font-medium" />
-                          <TextCell
-                            value={s.status}
-                            className="text-muted-foreground"
-                          />
                           {comparisonCells(s)}
                         </TableRow>
                       ))}

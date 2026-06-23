@@ -77,6 +77,7 @@ const MANUAL_FIELD_KEYS = [
   'caseId',
   'isJustified',
   'justified',
+  'inspection',
   'notes',
   'issues',
   'annotationCreatedAt',

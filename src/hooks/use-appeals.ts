@@ -133,7 +133,7 @@ function applyManualPatch(appeal: Appeal, patch: AppealPatch): Appeal {
     manualFields.isJustified = patch.isJustified
   }
 
-  for (const key of ['notes', 'issues'] as const) {
+  for (const key of ['notes', 'issues', 'inspection'] as const) {
     if (patch[key] === undefined) continue
     const value = patch[key]?.trim()
     if (value) {

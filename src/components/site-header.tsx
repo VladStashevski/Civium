@@ -10,6 +10,7 @@ const TITLES: Record<string, string> = {
   '/appeals': 'Все обращения',
   '/references': 'Справочники',
   '/slides': 'Слайды',
+  '/experiments': 'Экспериментальные функции',
   '/pos': 'Дашборд ПОС',
   '/pos-table': 'Сообщения ПОС',
 }
