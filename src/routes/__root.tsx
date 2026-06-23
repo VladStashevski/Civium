@@ -27,7 +27,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   if (isPending) {
     return (
       <div
-        className="flex min-h-svh items-center justify-center text-muted-foreground"
+        className="flex min-h-svh items-center justify-center text-muted-foreground duration-500 animate-in fade-in-0"
         role="status"
         aria-label="Загрузка"
       >
@@ -48,6 +48,7 @@ function Shell() {
     <SidebarProvider
       open={sidebarOpen}
       onOpenChange={setSidebarOpen}
+      className="duration-300 animate-in fade-in-0"
       style={
         {
           '--sidebar-width': 'calc(var(--spacing) * 72)',

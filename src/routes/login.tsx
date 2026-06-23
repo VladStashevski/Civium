@@ -9,7 +9,7 @@ export const Route = createFileRoute('/login')({
 
 function LoginPage() {
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
+    <div className="grid min-h-svh duration-300 animate-in fade-in-0 lg:grid-cols-2">
       <div className="flex flex-col gap-4 p-6 md:p-10">
         <div className="flex items-center">
           <CiviumLogo className="size-9 text-primary" />
