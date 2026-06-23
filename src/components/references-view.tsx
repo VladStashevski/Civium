@@ -9,8 +9,8 @@ import {
 } from '@/components/ui/card'
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
-  PopoverTrigger,
 } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -42,69 +42,35 @@ const MONTHS_SHORT = [
   'дек',
 ]
 
-function TextCell({
+// Ячейка максимально лёгкая — просто span с CSS-обрезкой и нативным title (полный
+// текст по наведению). Раскрытие по КЛИКУ обрабатывается одним обработчиком на всю
+// таблицу (делегирование, см. ReferencesView): на ячейках нет ни Popover, ни
+// обработчиков, ни состояния — поэтому монтаж/переключение вкладок не подвисает и не
+// мигает. data-truncatable — маркер для делегирующего обработчика. memo — чтобы при
+// ре-рендере родителя ячейки с теми же props не пересобирались.
+const TextCell = React.memo(function TextCell({
   value,
   className,
 }: {
   value?: string
   className?: string
 }) {
-  const text = value || '—'
-  const textRef = React.useRef<HTMLSpanElement>(null)
-  const [isTruncated, setIsTruncated] = React.useState(false)
-
-  React.useEffect(() => {
-    const element = textRef.current
-    if (!element) return
-
-    const update = () =>
-      setIsTruncated(element.scrollWidth > element.clientWidth + 1)
-    update()
-
-    const observer = new ResizeObserver(update)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [text])
-
   return (
     <TableCell className={cn('min-w-0 overflow-hidden', className)}>
       {value ? (
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              disabled={!isTruncated}
-              className={cn(
-                'block w-full min-w-0 max-w-full overflow-hidden text-left',
-                isTruncated &&
-                  'cursor-pointer underline-offset-2 decoration-dotted hover:underline aria-expanded:underline',
-                className,
-              )}
-              aria-label={
-                isTruncated ? `Показать полностью: ${text}` : undefined
-              }
-            >
-              <span
-                ref={textRef}
-                className="block w-full overflow-hidden text-ellipsis whitespace-nowrap"
-              >
-                {text}
-              </span>
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="start"
-            className="max-h-80 w-auto max-w-md overflow-auto"
-          >
-            <p className="text-sm break-words whitespace-pre-wrap">{text}</p>
-          </PopoverContent>
-        </Popover>
+        <span
+          data-truncatable
+          title={value}
+          className="block w-full cursor-default overflow-hidden text-ellipsis whitespace-nowrap"
+        >
+          {value}
+        </span>
       ) : (
         <span className="text-muted-foreground/60">—</span>
       )}
     </TableCell>
   )
-}
+})
 
 function CountCell({ value, strong = false }: { value: number; strong?: boolean }) {
   return (
@@ -177,11 +143,32 @@ function DeltaCell({
 export function ReferencesView({ mode }: { mode: AppealMode }) {
   const { data, isPending } = useReferences(mode)
   const [tab, setTab] = usePersistentState('references:tab', 'rubrics')
+  // Один общий поповер для раскрытия полного текста обрезанной ячейки. expand
+  // хранит текст и положение кликнутой ячейки; onExpand стабилен (useCallback),
+  // поэтому контекст не заставляет мемоизированные ячейки ре-рендериться.
+  const [expand, setExpand] = React.useState<{ text: string; rect: DOMRect } | null>(
+    null,
+  )
+  // Делегирование: один обработчик на таблицу. Клик по обрезанной ячейке открывает
+  // общий поповер у её позиции; на самих ячейках обработчиков нет.
+  const handleCellClick = React.useCallback((event: React.MouseEvent) => {
+    const span = (event.target as HTMLElement).closest<HTMLElement>(
+      '[data-truncatable]',
+    )
+    if (span && span.scrollWidth > span.clientWidth + 1) {
+      setExpand({
+        text: span.textContent ?? '',
+        rect: span.getBoundingClientRect(),
+      })
+    }
+  }, [])
   const rubrics = data?.rubrics ?? []
   const themes = data?.themes ?? []
   const sources = data?.sources ?? []
-  const profiles = data?.profiles ?? []
-  const departments = data?.departments ?? []
+  // Мемоизируем (нужны как стабильные deps для мемо тяжёлой таблицы ниже): пока
+  // data из React Query не меняется, ссылки на массивы постоянны между ре-рендерами.
+  const profiles = React.useMemo(() => data?.profiles ?? [], [data])
+  const departments = React.useMemo(() => data?.departments ?? [], [data])
   const currentYear = data?.comparison.currentYear ?? 0
   const previousYear = data?.comparison.previousYear ?? currentYear - 1
   const cutoffMonth = Number(data?.comparison.cutoffMonthDay.slice(0, 2)) || 12
@@ -191,26 +178,78 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
   const periodLabel = data
     ? `Сопоставимый период ${previousYear} и ${currentYear} годов`
     : ''
-  const comparisonHeaders = (
-    <>
-      <TableHead className="w-20 text-right">{previousYear}</TableHead>
-      <TableHead className="w-20 text-right">{currentYear}</TableHead>
-      <TableHead className="w-24 text-right">Динамика</TableHead>
-    </>
-  )
-  const comparisonCells = (item: RefItem) => {
-    const previous = yearCount(item, previousYear)
-    const current = yearCount(item, currentYear)
-    return (
+  // Стабильные (мемоизированные) хелперы — нужны, чтобы мемо тяжёлой таблицы ниже
+  // не сбрасывался на каждом ре-рендере (смена вкладки).
+  const comparisonHeaders = React.useMemo(
+    () => (
       <>
-        <CountCell value={previous} />
-        <CountCell value={current} strong />
-        <DeltaCell current={current} previous={previous} />
+        <TableHead className="w-20 text-right">{previousYear}</TableHead>
+        <TableHead className="w-20 text-right">{currentYear}</TableHead>
+        <TableHead className="w-24 text-right">Динамика</TableHead>
       </>
+    ),
+    [previousYear, currentYear],
+  )
+  const comparisonCells = React.useCallback(
+    (item: RefItem) => {
+      const previous = yearCount(item, previousYear)
+      const current = yearCount(item, currentYear)
+      return (
+        <>
+          <CountCell value={previous} />
+          <CountCell value={current} strong />
+          <DeltaCell current={current} previous={previous} />
+        </>
+      )
+    },
+    [previousYear, currentYear],
+  )
+  // Отделения сортируем по профилю (в порядке справочника профилей), внутри —
+  // по числу обращений текущего года. Профиль показываем отдельной колонкой.
+  const departmentsByProfile = React.useMemo(() => {
+    const profileOrder = new Map(
+      profiles.map((profile, index) => [profile.name, index] as const),
     )
-  }
+    return [...departments].sort((a, b) => {
+      const orderA = profileOrder.get(a.profile ?? '') ?? profiles.length
+      const orderB = profileOrder.get(b.profile ?? '') ?? profiles.length
+      if (orderA !== orderB) return orderA - orderB
+      return yearCount(b, currentYear) - yearCount(a, currentYear)
+    })
+  }, [departments, profiles, currentYear])
+
+  // Таблица «Отделения» — самая тяжёлая (58 строк). Мемоизируем её JSX и держим
+  // панель смонтированной (forceMount): тогда смена вкладки НЕ пересобирает и НЕ
+  // перемонтирует эту таблицу, не блокирует главный поток ~30 мс — и CSS-переход
+  // фона активного таба перестаёт дёргаться. Остальные таблицы лёгкие, их не трогаем.
+  const departmentsTable = React.useMemo(
+    () => (
+      <div className="overflow-hidden rounded-lg border">
+        <Table className="table-fixed">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Отделение</TableHead>
+              <TableHead className="w-1/4">Профиль</TableHead>
+              {comparisonHeaders}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {departmentsByProfile.map((d) => (
+              <TableRow key={d.id}>
+                <TextCell value={d.name} className="font-medium" />
+                <TextCell value={d.profile} className="text-muted-foreground" />
+                {comparisonCells(d)}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    ),
+    [departmentsByProfile, comparisonHeaders, comparisonCells],
+  )
 
   return (
+    <>
     <div className="px-4 lg:px-6">
       <Card>
         <CardHeader>
@@ -229,7 +268,12 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
               ))}
             </div>
           ) : (
-            <Tabs value={tab} onValueChange={setTab} className="gap-4">
+            <Tabs
+              value={tab}
+              onValueChange={setTab}
+              className="gap-4"
+              onClick={handleCellClick}
+            >
               <div className="-mx-1 overflow-x-auto px-1">
                 <TabsList>
                 <TabsTrigger value="rubrics">
@@ -267,8 +311,6 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
 
               <TabsContent
                 value="rubrics"
-                forceMount
-                className="data-[state=inactive]:hidden"
               >
                 <div className="overflow-hidden rounded-lg border">
                   <Table className="table-fixed">
@@ -302,8 +344,6 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
 
               <TabsContent
                 value="themes"
-                forceMount
-                className="data-[state=inactive]:hidden"
               >
                 <div className="overflow-hidden rounded-lg border">
                   <Table className="table-fixed">
@@ -337,8 +377,6 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
 
               <TabsContent
                 value="sources"
-                forceMount
-                className="data-[state=inactive]:hidden"
               >
                 <div className="overflow-hidden rounded-lg border">
                   <Table className="table-fixed">
@@ -362,8 +400,6 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
 
               <TabsContent
                 value="profiles"
-                forceMount
-                className="data-[state=inactive]:hidden"
               >
                 <div className="overflow-hidden rounded-lg border">
                   <Table className="table-fixed">
@@ -404,34 +440,38 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                 forceMount
                 className="data-[state=inactive]:hidden"
               >
-                <div className="overflow-hidden rounded-lg border">
-                  <Table className="table-fixed">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Отделение</TableHead>
-                        <TableHead className="w-1/4">Профиль</TableHead>
-                        {comparisonHeaders}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {byCurrentYear(departments, currentYear).map((d) => (
-                        <TableRow key={d.id}>
-                          <TextCell value={d.name} className="font-medium" />
-                          <TextCell
-                            value={d.profile}
-                            className="text-muted-foreground"
-                          />
-                          {comparisonCells(d)}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                {departmentsTable}
               </TabsContent>
             </Tabs>
           )}
         </CardContent>
       </Card>
     </div>
+    {expand && (
+      <Popover open onOpenChange={(next) => !next && setExpand(null)}>
+        <PopoverAnchor asChild>
+          <div
+            aria-hidden
+            className="pointer-events-none fixed"
+            style={{
+              left: expand.rect.left,
+              top: expand.rect.top,
+              width: expand.rect.width,
+              height: expand.rect.height,
+            }}
+          />
+        </PopoverAnchor>
+        <PopoverContent
+          align="start"
+          sideOffset={4}
+          className="max-h-80 w-auto max-w-md overflow-auto"
+        >
+          <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
+            {expand.text}
+          </p>
+        </PopoverContent>
+      </Popover>
+    )}
+    </>
   )
 }

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CheckIcon, PencilSimpleIcon } from '@phosphor-icons/react'
+import { PencilSimpleIcon } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -122,6 +122,9 @@ function CountBadge({ count }: { count: number }) {
   )
 }
 
+// Выбор показываем заливкой, БЕЗ галочки: иначе появление иконки меняет ширину
+// чипа, соседи разъезжаются и нужен FLIP (он и давал «дёрганье»). Фиксированная
+// ширина → переключение мгновенное и спокойное, анимируется только цвет.
 function DepartmentChip({
   name,
   label,
@@ -139,15 +142,9 @@ function DepartmentChip({
       title={name}
       data-selected={selected}
       onClick={onToggle}
-      className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-[color,background-color,border-color,transform] duration-150 ease-out active:translate-y-px data-[selected=false]:bg-background data-[selected=false]:text-foreground/80 data-[selected=false]:hover:border-primary/40 data-[selected=false]:hover:bg-primary/5 data-[selected=true]:border-primary data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground"
+      className="rounded-md border px-2.5 py-1 text-xs transition-[color,background-color,border-color,transform] duration-150 ease-out active:translate-y-px data-[selected=false]:bg-background data-[selected=false]:text-foreground/80 data-[selected=false]:hover:border-primary/40 data-[selected=false]:hover:bg-primary/5 data-[selected=true]:border-primary data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground"
     >
-      {selected && (
-        <CheckIcon
-          weight="bold"
-          className="size-3 shrink-0 duration-150 animate-in zoom-in-50 fade-in-0"
-        />
-      )}
-      <span className="truncate">{label}</span>
+      {label}
     </button>
   )
 }
@@ -220,10 +217,6 @@ function AnimatedHeight({ children }: { children: React.ReactNode }) {
   )
 }
 
-// FLIP: при смене ширины чипа (появилась/ушла галочка) соседи и переносы строк
-// двигаются не скачком, а плавно. Меряем позиции обёрток до/после рендера, гасим
-// разницу обратным transform и анимируем его к нулю. transform живёт на обёртке —
-// отдельной от кнопки, чтобы не конфликтовать с её active:translate-y.
 function DepartmentChips({
   departments,
   selected,
@@ -233,58 +226,16 @@ function DepartmentChips({
   selected: Set<string>
   onToggle: (name: string) => void
 }) {
-  const containerRef = React.useRef<HTMLDivElement>(null)
-  const prevRects = React.useRef(
-    new Map<string, { left: number; top: number }>(),
-  )
-
-  React.useLayoutEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-
-    // Координаты чипов меряем ОТНОСИТЕЛЬНО контейнера, а не вьюпорта: пока едет
-    // высота, центрированный диалог сам уезжает по вертикали — в абсолютных
-    // координатах сместились бы СРАЗУ все чипы, и FLIP принял бы это за их
-    // переезд и дёрнул бы их все одновременно. Относительные координаты
-    // реагируют только на реальное перетекание чипов внутри контейнера.
-    const base = container.getBoundingClientRect()
-
-    for (const wrap of Array.from(container.children) as HTMLElement[]) {
-      const name = wrap.dataset.name
-      if (!name) continue
-      const rect = wrap.getBoundingClientRect()
-      const left = rect.left - base.left
-      const top = rect.top - base.top
-      const prev = prevRects.current.get(name)
-      prevRects.current.set(name, { left, top })
-      if (!prev) continue
-      const dx = prev.left - left
-      const dy = prev.top - top
-      if (!dx && !dy) continue
-      wrap.style.transition = 'none'
-      wrap.style.transform = `translate(${dx}px, ${dy}px)`
-      requestAnimationFrame(() => {
-        wrap.style.transition = 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1)'
-        wrap.style.transform = ''
-      })
-    }
-  })
-
   return (
-    <div
-      ref={containerRef}
-      className="flex flex-wrap gap-1.5 duration-200 ease-out animate-in fade-in-0"
-    >
+    <div className="flex flex-wrap gap-1.5">
       {departments.map((department) => (
-        <div key={department.name} data-name={department.name} className="inline-flex">
-          <DepartmentChip
-            name={department.name}
-            label={departmentShortLabel(department)}
-            selected={selected.has(department.name)}
-            onToggle={() => onToggle(department.name)}
-          />
-        </div>
+        <DepartmentChip
+          key={department.name}
+          name={department.name}
+          label={departmentShortLabel(department)}
+          selected={selected.has(department.name)}
+          onToggle={() => onToggle(department.name)}
+        />
       ))}
     </div>
   )
@@ -351,7 +302,6 @@ export function DepartmentSelect({
       <AnimatedHeight>
         <div className="pt-2.5">
           <DepartmentChips
-            key={activeProfile}
             departments={activeGroup.departments}
             selected={selected}
             onToggle={toggle}

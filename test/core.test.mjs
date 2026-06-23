@@ -13,6 +13,11 @@ import {
 } from '../scripts/appeals-store.mjs'
 import { normalizePosRecords } from '../scripts/pos-parser.mjs'
 import { mergePosRecords } from '../scripts/pos-store.mjs'
+import {
+  DEPARTMENT_BY_NAME,
+  DEPARTMENT_GROUPS,
+  DEPARTMENT_OPTIONS,
+} from '../scripts/departments.mjs'
 import XLSX from 'xlsx'
 
 test('manual records receive unique generated identifiers', () => {
@@ -120,26 +125,25 @@ test('dashboard compares current and previous years through the same date', () =
 test('references include all department profiles and departments with zero counts', () => {
   const references = buildReferenceData([])
 
-  assert.equal(references.profiles.length, 5)
-  assert.equal(references.departments.length, 35)
+  // Справочник отзеркаливает таксономию из departments.mjs — сверяем с ней,
+  // а не с захардкоженными числами, чтобы тест не ломался при правке структуры.
+  assert.equal(references.profiles.length, DEPARTMENT_GROUPS.length)
+  assert.equal(references.departments.length, DEPARTMENT_OPTIONS.length)
   assert.deepEqual(
     references.profiles.map((profile) => [profile.name, profile.count]),
-    [
-      ['Хирургический профиль', 0],
-      ['Терапевтический профиль', 0],
-      ['Онкологический профиль', 0],
-      ['Инфекционный профиль', 0],
-      ['Поликлинический профиль', 0],
-    ],
+    DEPARTMENT_GROUPS.map((group) => [group.profile, 0]),
   )
-  assert.ok(
-    references.departments.some(
-      (department) =>
-        department.name === 'Неврологическое отделение' &&
-        department.profile === 'Терапевтический профиль' &&
-        department.count === 0,
-    ),
-  )
+  for (const option of DEPARTMENT_OPTIONS) {
+    assert.ok(
+      references.departments.some(
+        (department) =>
+          department.name === option.value &&
+          department.profile === option.profile &&
+          department.count === 0,
+      ),
+      `в справочнике нет отделения с нулевым счётом: ${option.value}`,
+    )
+  }
 })
 
 test('references count department profiles by current-year months', () => {
@@ -151,9 +155,8 @@ test('references count department profiles by current-year months', () => {
       departments: ['Неврологическое отделение'],
     },
   ])
-  const profile = references.profiles.find(
-    (item) => item.name === 'Терапевтический профиль',
-  )
+  const neuroProfile = DEPARTMENT_BY_NAME.get('Неврологическое отделение').profile
+  const profile = references.profiles.find((item) => item.name === neuroProfile)
 
   assert.equal(profile.years[2026], 1)
   assert.equal(profile.months[2026]['03'], 1)
