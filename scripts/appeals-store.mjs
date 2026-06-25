@@ -504,6 +504,7 @@ function buildRubricReferences(records) {
         name: rubric.name,
         theme: rubric.theme,
         groupCode: rubric.groupCode,
+        description: rubric.description,
         aliases: [],
         rawValues: [],
         count: 0,

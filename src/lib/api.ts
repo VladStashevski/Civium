@@ -324,7 +324,7 @@ export type RefItem = {
   years?: Record<string, number>
   months?: Record<string, Record<string, number>>
 }
-export type Rubric = RefItem & { code?: string; theme?: string }
+export type Rubric = RefItem & { code?: string; theme?: string; description?: string }
 export type Theme = RefItem & { code?: string; description?: string }
 export type Source = RefItem & { status?: string }
 export type DepartmentProfile = RefItem & { short?: string }

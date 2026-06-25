@@ -324,9 +324,10 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                   <Table className="table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-2/5">Рубрика</TableHead>
-                        <TableHead className="text-center">Тематика</TableHead>
-                        <TableHead className="w-28">Код</TableHead>
+                        <TableHead className="w-[26%]">Рубрика</TableHead>
+                        <TableHead>Что означает</TableHead>
+                        <TableHead className="w-[22%] text-center">Тематика</TableHead>
+                        <TableHead className="w-28 text-center">Код</TableHead>
                         {comparisonHeaders}
                       </TableRow>
                     </TableHeader>
@@ -335,12 +336,16 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
                         <TableRow key={r.id}>
                           <TextCell value={r.name} className="font-medium" />
                           <TextCell
+                            value={r.description}
+                            className="text-muted-foreground"
+                          />
+                          <TextCell
                             value={r.theme}
                             className="text-center text-muted-foreground"
                           />
                           <TextCell
                             value={r.code}
-                            className="font-mono text-xs text-muted-foreground"
+                            className="text-center font-mono text-xs text-muted-foreground"
                           />
                           {comparisonCells(r)}
                         </TableRow>
