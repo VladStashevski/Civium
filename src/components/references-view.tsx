@@ -61,7 +61,7 @@ const TextCell = React.memo(function TextCell({
         <span
           data-truncatable
           title={value}
-          className="block w-full cursor-default overflow-hidden text-ellipsis whitespace-nowrap"
+          className="block w-full cursor-default overflow-hidden text-ellipsis whitespace-nowrap underline-offset-2 decoration-dotted data-[overflowing=true]:cursor-pointer data-[overflowing=true]:hover:underline"
         >
           {value}
         </span>
@@ -149,8 +149,15 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
   const [expand, setExpand] = React.useState<{ text: string; rect: DOMRect } | null>(
     null,
   )
-  // Делегирование: один обработчик на таблицу. Клик по обрезанной ячейке открывает
-  // общий поповер у её позиции; на самих ячейках обработчиков нет.
+  // Делегирование: проверяем переполнение на наведении и отмечаем только реально
+  // обрезанные ячейки как кликабельные; клик по такой ячейке открывает общий поповер.
+  const handleCellPointerOver = React.useCallback((event: React.PointerEvent) => {
+    const span = (event.target as HTMLElement).closest<HTMLElement>(
+      '[data-truncatable]',
+    )
+    if (!span) return
+    span.dataset.overflowing = String(span.scrollWidth > span.clientWidth + 1)
+  }, [])
   const handleCellClick = React.useCallback((event: React.MouseEvent) => {
     const span = (event.target as HTMLElement).closest<HTMLElement>(
       '[data-truncatable]',
@@ -272,6 +279,7 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
               value={tab}
               onValueChange={setTab}
               className="gap-4"
+              onPointerOver={handleCellPointerOver}
               onClick={handleCellClick}
             >
               <div className="-mx-1 overflow-x-auto px-1">
