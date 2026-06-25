@@ -197,19 +197,50 @@ test('store separates registration route, source organization and channel', () =
           'Администрация Президента Российской Федерации - Исх. № 456',
         documentSource: 'Обращения на имя главного врача',
       },
+      {
+        ...makeRecord('07-ОГ-5'),
+        recipient: 'Департамент здравоохранения Ханты-Мансийского автономного округа – Югры',
+        delivery: 'СЭВ',
+        groupIndex: '07',
+        siteAppealNumber: '8282516',
+      },
+      {
+        ...makeRecord('01-ОГ-6'),
+        recipient: 'Губернатор Ханты-Мансийского автономного округа - Югры',
+        delivery: 'СЭВ',
+        groupIndex: '01',
+        siteAppealNumber: '10920956',
+      },
+      {
+        ...makeRecord('07-ОГ-7'),
+        supportDocument:
+          'Администрация города Сургута - Исх. № 123 от 01.01.2025',
+        delivery: 'СЭВ',
+        groupIndex: '07',
+      },
     ],
   })
 
-  const [chiefDoctor, department, governor, president] = store.records
+  const [
+    chiefDoctor,
+    department,
+    governor,
+    president,
+    departmentSite,
+    governorSite,
+    municipal,
+  ] = store.records
 
   assert.equal(chiefDoctor.appealMode, 'chiefDoctor')
   assert.equal(chiefDoctor.registrationRoute, '07/19 — главный врач')
   assert.equal(chiefDoctor.sourceChannel, 'E-mail')
   assert.match(chiefDoctor.sourceOrganization, /Непосредственно от заявителя/)
+  assert.equal(chiefDoctor.sourceOrganizationDetail, 'E-mail')
 
   assert.equal(department.appealMode, 'external')
   assert.equal(department.registrationRoute, '07-* — Депздрав Югры')
   assert.equal(department.sourceOrganization, 'Органы прокуратуры')
+  assert.equal(department.sourceOrganizationDetail, 'Прокуратура города Сургута')
   assert.equal(department.sourceChannel, 'СЭДД')
 
   assert.equal(governor.registrationRoute, '01-* — Губернатор Югры')
@@ -217,6 +248,30 @@ test('store separates registration route, source organization and channel', () =
 
   assert.equal(president.registrationRoute, '07-* — Депздрав Югры')
   assert.equal(president.sourceOrganization, 'Администрация Президента РФ')
+
+  assert.equal(departmentSite.registrationRoute, '07-* — Депздрав Югры')
+  assert.equal(
+    departmentSite.sourceOrganization,
+    'Департамент здравоохранения ХМАО-Югры',
+  )
+  assert.equal(departmentSite.sourceChannel, 'СЭВ')
+
+  assert.equal(governorSite.registrationRoute, '01-* — Губернатор Югры')
+  assert.equal(
+    governorSite.sourceOrganization,
+    'Аппарат Губернатора и Правительства ХМАО-Югры',
+  )
+  assert.equal(governorSite.sourceChannel, 'СЭВ')
+
+  assert.equal(municipal.registrationRoute, '07-* — Депздрав Югры')
+  assert.equal(municipal.sourceOrganization, 'Иные органы власти ХМАО-Югры')
+  assert.equal(municipal.sourceOrganizationDetail, 'Администрация города Сургута')
+
+  const externalSources = buildReferenceData(
+    store.records.filter((record) => record.appealMode === 'external'),
+  ).sources.map((source) => source.name)
+  assert.ok(externalSources.includes('Администрация города Сургута'))
+  assert.equal(externalSources.includes('Иные органы власти ХМАО-Югры'), false)
 })
 
 test('reimport replaces the Excel snapshot and preserves manual data', () => {

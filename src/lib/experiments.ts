@@ -32,7 +32,9 @@ export function clamp(value: number, min = 0, max = 100): number {
 /** Источник обращения с учётом режима (как в таблице обращений). */
 export function effectiveSource(appeal: Appeal, mode: AppealMode): string {
   const raw =
-    mode === 'chiefDoctor' ? appeal.sourceChannel : appeal.sourceOrganization
+    mode === 'chiefDoctor'
+      ? appeal.sourceChannel
+      : appeal.sourceOrganizationDetail || appeal.sourceOrganization
   return (raw || appeal.source || 'Не указан').trim() || 'Не указан'
 }
 

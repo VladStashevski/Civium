@@ -504,7 +504,9 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
   const sources = rankRows(refPrevItems, refCurItems, (appeal) => [
     mode === 'chiefDoctor'
       ? appeal.sourceChannel || 'Источник не определён'
-      : appeal.sourceOrganization || 'Источник не определён',
+      : appeal.sourceOrganizationDetail ||
+        appeal.sourceOrganization ||
+        'Источник не определён',
   ])
   const topics = countOfficialRows(
     refPrevItems,

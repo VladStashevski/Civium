@@ -119,7 +119,9 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
   const sourceOptions = React.useMemo(
     () =>
       uniqueOptions(rows, (appeal) =>
-        mode === 'chiefDoctor' ? appeal.sourceChannel : appeal.sourceOrganization,
+        mode === 'chiefDoctor'
+          ? appeal.sourceChannel
+          : appeal.sourceOrganizationDetail || appeal.sourceOrganization,
       ),
     [rows, mode],
   )

@@ -18,7 +18,7 @@ import {
   resolveDepartmentName,
 } from './departments.mjs'
 
-export const STORE_VERSION = 8
+export const STORE_VERSION = 9
 
 const APPEAL_MODES = {
   chiefDoctor: 'chiefDoctor',
@@ -561,31 +561,51 @@ function buildThematicGroupReferences(records) {
 }
 
 function buildSourceReferences(records) {
-  const sources = new Map(
-    APPEAL_SOURCES.map((source) => [
-      source.name,
-      {
-        id: `source:${fingerprint(source.name)}`,
-        key: fingerprint(source.name),
-        name: source.name,
-        status: source.status,
-        count: 0,
-        years: {},
-      },
-    ])
-  )
-
+  const sources = new Map()
   for (const record of records) {
-    const name = canonicalizeAppealSource(
-      record.sourceOrganization || record.documentSource || record.source
-    )
-    const item = sources.get(name)
-    if (!item) continue
+    const name = resolveReferenceSourceName(record)
+    const key = fingerprint(name)
+    const item = sources.get(key) ?? {
+      id: `source:${key}`,
+      key,
+      name,
+      status: resolveSourceReferenceStatus(record),
+      count: 0,
+      years: {},
+    }
     item.count += 1
     if (record.year) item.years[record.year] = (item.years[record.year] ?? 0) + 1
+    sources.set(key, item)
   }
 
-  return APPEAL_SOURCES.map((source) => sources.get(source.name))
+  return [...sources.values()].sort(
+    (a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru')
+  )
+}
+
+function resolveReferenceSourceName(record) {
+  if (record.appealMode === APPEAL_MODES.chiefDoctor) {
+    return clean(record.sourceChannel || record.delivery) || 'Не указан'
+  }
+
+  return (
+    clean(record.sourceOrganizationDetail) ||
+    clean(record.sourceOrganization) ||
+    clean(record.documentSource) ||
+    clean(record.source) ||
+    SOURCE_NAMES.unknown
+  )
+}
+
+function resolveSourceReferenceStatus(record) {
+  if (record.appealMode === APPEAL_MODES.chiefDoctor) {
+    return 'Источник поступления в контуре 07/19'
+  }
+
+  const source = canonicalizeAppealSource(
+    record.sourceOrganization || record.documentSource || record.source
+  )
+  return APPEAL_SOURCES.find((item) => item.name === source)?.status ?? source
 }
 
 function buildNamedReferences(records, getValue, options = {}) {
@@ -723,6 +743,16 @@ function normalizeAppealRow(row, metadata) {
     registration.appealMode === APPEAL_MODES.chiefDoctor
       ? SOURCE_NAMES.direct
       : documentSource
+  const sourceOrganizationDetail = resolveAppealSourceOrganizationDetail({
+    registration,
+    documentSource,
+    supportDocument,
+    recipient,
+    sourceSystem,
+    delivery,
+    siteAppealNumber,
+    posMessageNumber,
+  })
 
   return {
     ...strictRecord,
@@ -745,6 +775,7 @@ function normalizeAppealRow(row, metadata) {
     intent: strictRecord.intent || rubricCanonicalName || category,
     source: sourceOrganization,
     sourceOrganization,
+    sourceOrganizationDetail,
     sourceChannel: delivery || 'Не указан',
     appealMode: registration.appealMode,
     registrationRoute: registration.registrationRoute,
@@ -765,6 +796,7 @@ function normalizeAppealRow(row, metadata) {
     groupIndex,
     groupDocuments,
     delivery,
+    documentSource,
     siteAppealNumber,
     posMessageNumber,
     sourceSystem,
@@ -885,6 +917,16 @@ function migrateRecord(record) {
     registration.appealMode === APPEAL_MODES.chiefDoctor
       ? SOURCE_NAMES.direct
       : documentSource
+  const sourceOrganizationDetail = resolveAppealSourceOrganizationDetail({
+    registration,
+    documentSource,
+    supportDocument,
+    recipient: record.recipient,
+    sourceSystem: record.sourceSystem,
+    delivery: record.delivery,
+    siteAppealNumber: record.siteAppealNumber,
+    posMessageNumber: record.posMessageNumber,
+  })
   // Формат ключа пересчитываем всегда (миграция со старого `год:№РК:дата`),
   // чтобы uid/appealKey были стабильны между выгрузками.
   const appealKey = `${year || 'unknown'}:${record.id || record.rkNumber || 'no-rk'}`
@@ -921,6 +963,7 @@ function migrateRecord(record) {
         },
     source: sourceOrganization,
     sourceOrganization,
+    sourceOrganizationDetail,
     sourceChannel: clean(record.delivery) || 'Не указан',
     appealMode: registration.appealMode,
     registrationRoute: registration.registrationRoute,
@@ -1120,6 +1163,7 @@ function resolveOfficialRubric(name, code = '') {
 function resolveAppealDocumentSource({
   id,
   supportDocument,
+  recipient,
   groupIndex,
   siteAppealNumber,
   posMessageNumber,
@@ -1130,23 +1174,30 @@ function resolveAppealDocumentSource({
     .filter(Boolean)
     .join(' ')
     .toLocaleLowerCase('ru-RU')
+  const recipientText = clean(recipient).toLocaleLowerCase('ru-RU')
   const idText = clean(id)
   const groupIndexText = clean(groupIndex)
+  const registration = resolveRegistration(idText, groupIndexText)
+  const isChiefDoctor = registration.appealMode === APPEAL_MODES.chiefDoctor
+  const hasDirectChannel =
+    Boolean(clean(siteAppealNumber) || clean(posMessageNumber)) ||
+    /сообщение\s+пос|\bпос\b|платформ[а-яё]*\s+обратн[а-яё]*\s+связ/.test(senderText) ||
+    /сообщество\s+вк|вконтакте|\bvk\b|послушайте[, ]+\s*доктор|паблик/.test(senderText)
 
-  // Особые каналы прямой подачи гражданином (сайт / ПОС / соцсети)
-  if (clean(siteAppealNumber) || clean(posMessageNumber)) {
-    return SOURCE_NAMES.direct
-  }
-  if (/сообщение\s+пос|\bпос\b|платформ[а-яё]*\s+обратн[а-яё]*\s+связ/.test(senderText)) {
-    return SOURCE_NAMES.direct
-  }
-  if (/сообщество\s+вк|вконтакте|\bvk\b|послушайте[, ]+\s*доктор|паблик/.test(senderText)) {
-    return SOURCE_NAMES.direct
-  }
-
-  // Орган-источник по сопроводительному документу — приоритетнее контура регистрации
+  // Орган-источник по сопроводительному документу — приоритетнее адресата
+  // и контура регистрации.
   const organization = classifyOrganizationSource(senderText)
   if (organization) return organization
+
+  // В PrintResult для внешних 07-* / 01-* источник часто лежит в «Кому»:
+  // Депздрав Югры / Губернатор Югры. Не заменяем его на «сайт ОГВ».
+  const recipientOrganization = classifyOrganizationSource(recipientText)
+  if (recipientOrganization) return recipientOrganization
+
+  // Особые каналы прямой подачи гражданином (сайт / ПОС / соцсети) считаем
+  // direct только для 07/19. Для внешних 07-* / 01-* источник задаёт контур
+  // или сопроводительный документ.
+  if (hasDirectChannel && isChiefDoctor) return SOURCE_NAMES.direct
 
   // Сопроводиловка есть, но отправитель не распознан — честный «не определён»,
   // НЕ приписываем контуру регистрации (это и был баг с «Департаментом»).
@@ -1192,6 +1243,154 @@ function hasSourceEvidence({
       clean(sourceSystem) ||
       clean(siteAppealNumber) ||
       clean(posMessageNumber)
+  )
+}
+
+function resolveAppealSourceOrganizationDetail({
+  registration,
+  documentSource,
+  supportDocument,
+  recipient,
+  sourceSystem,
+  delivery,
+  siteAppealNumber,
+  posMessageNumber,
+}) {
+  const directDetail = resolveDirectSourceDetail({
+    delivery,
+    sourceSystem,
+    siteAppealNumber,
+    posMessageNumber,
+  })
+
+  if (registration.appealMode === APPEAL_MODES.chiefDoctor) {
+    return directDetail
+  }
+
+  const concreteSource = [supportDocument, sourceSystem]
+    .map(extractOrganizationSourceDetail)
+    .find(isConcreteSourceDetail)
+  if (concreteSource) return concreteSource
+
+  const recipientSource = resolveRecipientSourceDetail(recipient, registration)
+  if (recipientSource) return recipientSource
+
+  if (documentSource === SOURCE_NAMES.direct) return directDetail
+  if (isResolvedSource(documentSource) && documentSource !== SOURCE_NAMES.chiefDoctor) {
+    return documentSource
+  }
+  return SOURCE_NAMES.unknown
+}
+
+function resolveDirectSourceDetail({
+  delivery,
+  sourceSystem,
+  siteAppealNumber,
+  posMessageNumber,
+}) {
+  const sourceText = clean(sourceSystem).toLocaleLowerCase('ru-RU')
+  if (
+    clean(posMessageNumber) ||
+    /сообщение\s+пос|\bпос\b|платформ[а-яё]*\s+обратн[а-яё]*\s+связ/.test(sourceText)
+  ) {
+    return 'ПОС'
+  }
+  if (/сообщество\s+вк|вконтакте|\bvk\b|паблик/.test(sourceText)) {
+    return 'ВКонтакте / социальные сети'
+  }
+  if (clean(siteAppealNumber)) return 'Единый сайт ОГВ'
+  return clean(delivery) || SOURCE_NAMES.direct
+}
+
+function resolveRecipientSourceDetail(recipient, registration) {
+  const text = clean(recipient)
+  if (!text) return fallbackRegistrationSource(registration)
+
+  const source = classifyOrganizationSource(text)
+  if (source && source !== SOURCE_NAMES.regionalAuthority) return source
+
+  const detail = extractOrganizationSourceDetail(text)
+  if (isConcreteSourceDetail(detail)) return detail
+
+  return fallbackRegistrationSource(registration)
+}
+
+function fallbackRegistrationSource(registration) {
+  if (registration.registrationRoute === REGISTRATION_ROUTES.department) {
+    return SOURCE_NAMES.department
+  }
+  if (registration.registrationRoute === REGISTRATION_ROUTES.governor) {
+    return SOURCE_NAMES.governor
+  }
+  return ''
+}
+
+function extractOrganizationSourceDetail(value) {
+  const text = clean(value)
+  if (!text) return ''
+
+  const known = normalizeKnownSourceDetail(text)
+  if (known) return known
+
+  const withoutDocumentMeta = text
+    .replace(/\s[-–—]\s+Исх\.?.*$/iu, '')
+    .replace(/\s[-–—]\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.?\s*[А-ЯЁ][а-яё-]+.*$/u, '')
+    .replace(/\s[-–—]\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.?.*$/u, '')
+    .replace(/\s+Исх\.?.*$/iu, '')
+    .replace(/\s+исходящ[а-яё]*\s+№.*$/iu, '')
+    .replace(/\s+(заместитель|директор|начальник|руководитель|председатель|врио|и\.?\s*о\.?).*$/iu, '')
+    .trim()
+
+  return normalizeKnownSourceDetail(withoutDocumentMeta) || withoutDocumentMeta
+}
+
+function normalizeKnownSourceDetail(value) {
+  const text = clean(value)
+  const lower = text.toLocaleLowerCase('ru-RU')
+  if (!text) return ''
+
+  if (/департамент\s+финансов\s+администрац[а-яё]*\s+г\.?\s*сургута/.test(lower)) {
+    return 'Департамент финансов Администрации города Сургута'
+  }
+  if (/администрац[а-яё]*\s+(?:города\s+){0,2}г?\.?\s*сургут(?:а)?(?![а-яё])/.test(lower)) {
+    return 'Администрация города Сургута'
+  }
+  if (/администрац[а-яё]*\s+сургутского\s+района/.test(lower)) {
+    return 'Администрация Сургутского района'
+  }
+  if (/администрац[а-яё]*\s+(города\s+)?г?\.?\s*нижневартовска/.test(lower)) {
+    return 'Администрация города Нижневартовска'
+  }
+  if (/департамент\s+внутренней\s+политики/.test(lower)) {
+    return 'Департамент внутренней политики ХМАО-Югры'
+  }
+  if (/департамент\s+социального\s+развития|депсоцразвития/.test(lower)) {
+    return 'Департамент социального развития ХМАО-Югры'
+  }
+  if (/департамент\s+труда\s+и\s+занятости/.test(lower)) {
+    return 'Департамент труда и занятости населения ХМАО-Югры'
+  }
+  if (/министерство\s+здравоохранения\s+(российской\s+федерации|рф)|минздрав\s+росси/.test(lower)) {
+    return 'Министерство здравоохранения Российской Федерации (Минздрав России)'
+  }
+  if (/департамент\s+здравоохранения\s+(ханты-мансийск|хмао)|депздрав\s+югры/.test(lower)) {
+    return SOURCE_NAMES.department
+  }
+  if (/аппарат\s+губернатора|правительств[а-яё]*\s+ханты-мансийск|губернатор/.test(lower)) {
+    return SOURCE_NAMES.governor
+  }
+
+  return ''
+}
+
+function isConcreteSourceDetail(value) {
+  const text = clean(value)
+  if (!text) return false
+  if (SOURCE_NAME_SET.has(text)) return true
+  if (classifyOrganizationSource(text)) return true
+
+  return /администрац|аппарат|бюро|департамент|дума|комитет|министерств|прокуратур|правительств|росздравнадзор|роспотребнадзор|служб[а-яё]*\s+по\s+надзор|следствен|страхов|тфомс|фонд\s+обязательн|управлен|уполномоченн|общественн[а-яё]+\s+палат|мвд|полици/i.test(
+    text
   )
 }
 

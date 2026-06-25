@@ -17,6 +17,7 @@ export type Appeal = {
   rubricTheme?: string
   source: string
   sourceOrganization: string
+  sourceOrganizationDetail: string
   sourceChannel: string
   appealMode: AppealMode
   registrationRoute: string
@@ -123,6 +124,10 @@ function normalizeAppeal(value: unknown): Appeal {
     source: stringValue(item.source),
     sourceOrganization:
       stringValue(item.sourceOrganization) || stringValue(item.source),
+    sourceOrganizationDetail:
+      stringValue(item.sourceOrganizationDetail) ||
+      stringValue(item.sourceOrganization) ||
+      stringValue(item.source),
     sourceChannel:
       stringValue(item.sourceChannel) || stringValue(item.delivery),
     appealMode,

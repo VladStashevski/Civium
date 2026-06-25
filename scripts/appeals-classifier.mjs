@@ -393,9 +393,10 @@ export function classifyOrganizationSource(value) {
     return APPEAL_SOURCE_NAMES.regionalAuthority
   }
 
-  // Муниципальные администрации — по решению заказчика остаются «напрямую от заявителя»
+  // Муниципальные администрации — внешний орган власти, а не прямое обращение
+  // заявителя.
   if (/администрац[а-яё]*\s+(город|г\.\s|сургутского\s+района|муниципальн)/.test(text)) {
-    return APPEAL_SOURCE_NAMES.direct
+    return APPEAL_SOURCE_NAMES.regionalAuthority
   }
 
   return ''

@@ -194,7 +194,7 @@ export const columns: ColumnDef<Appeal>[] = [
     accessorFn: (appeal) =>
       appeal.appealMode === 'chiefDoctor'
         ? appeal.sourceChannel
-        : appeal.sourceOrganization,
+        : appeal.sourceOrganizationDetail || appeal.sourceOrganization,
     header: 'Источник',
     filterFn: inArray,
     cell: ({ getValue }) => (

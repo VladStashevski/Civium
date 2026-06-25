@@ -74,6 +74,9 @@ export function normalizeManualRecord(input) {
     intent: clean(input.intent) || classifyIntent(content),
     source,
     sourceOrganization: isChiefDoctor ? APPEAL_SOURCE_NAMES.direct : source,
+    sourceOrganizationDetail: isChiefDoctor
+      ? clean(input.delivery) || 'Не указан'
+      : source,
     sourceChannel: clean(input.delivery) || 'Не указан',
     appealMode: registration.appealMode,
     registrationRoute: registration.registrationRoute,
@@ -160,9 +163,7 @@ export function buildDashboardData(records, metadata = {}) {
         .length,
       profileCount: countUnique(normalizedRecords.map((record) => record.profile)),
       sourceCount: countUnique(
-        externalRecords.map(
-          (record) => record.sourceOrganization || record.documentSource || record.source
-        )
+        externalRecords.map(getExternalSource)
       ),
       channelCount: countUnique(
         chiefDoctorRecords.map(
@@ -188,8 +189,7 @@ export function buildDashboardData(records, metadata = {}) {
     bySource: buildComparableCounts(
       externalRecords,
       previousRecords.filter((record) => getAppealMode(record) === 'external'),
-      (record) =>
-        record.sourceOrganization || record.documentSource || record.source
+      getExternalSource
     ),
     byChiefDoctorChannel: buildComparableCounts(
       chiefDoctorRecords,
@@ -260,9 +260,7 @@ function buildSummary(records, extra = {}) {
     total: records.length,
     profileCount: countUnique(records.map((record) => record.profile)),
     sourceCount: countUnique(
-      externalRecords.map(
-        (record) => record.sourceOrganization || record.documentSource || record.source
-      )
+      externalRecords.map(getExternalSource)
     ),
     channelCount: countUnique(
       chiefDoctorRecords.map(
@@ -574,6 +572,16 @@ function isRedirectedSource(source) {
 
 function getAppealMode(record) {
   return record.appealMode || resolveRegistration(record.id).appealMode
+}
+
+function getExternalSource(record) {
+  return (
+    record.sourceOrganizationDetail ||
+    record.sourceOrganization ||
+    record.documentSource ||
+    record.source ||
+    'Источник не определён'
+  )
 }
 
 function resolveRegistration(id) {
