@@ -3,6 +3,7 @@ import {
   APPEALS_CLASSIFIER_VERSION,
   APPEAL_SOURCES,
   APPEAL_SOURCE_NAMES as SOURCE_NAMES,
+  classifyOrganizationSource,
   OFFICIAL_RUBRICS,
   RUBRIC_ALIASES,
   THEMATIC_GROUPS,
@@ -17,7 +18,7 @@ import {
   resolveDepartmentName,
 } from './departments.mjs'
 
-export const STORE_VERSION = 7
+export const STORE_VERSION = 8
 
 const APPEAL_MODES = {
   chiefDoctor: 'chiefDoctor',
@@ -1126,11 +1127,13 @@ function resolveAppealDocumentSource({
 }) {
   const senderText = [supportDocument, sourceSystem]
     .map(clean)
+    .filter(Boolean)
     .join(' ')
     .toLocaleLowerCase('ru-RU')
   const idText = clean(id)
   const groupIndexText = clean(groupIndex)
 
+  // Особые каналы прямой подачи гражданином (сайт / ПОС / соцсети)
   if (clean(siteAppealNumber) || clean(posMessageNumber)) {
     return SOURCE_NAMES.direct
   }
@@ -1140,30 +1143,16 @@ function resolveAppealDocumentSource({
   if (/сообщество\s+вк|вконтакте|\bvk\b|послушайте[, ]+\s*доктор|паблик/.test(senderText)) {
     return SOURCE_NAMES.direct
   }
-  if (/альфа|согаз|капитал\s+мс|страхов|тфомс|тофомс|\bомс\b|обязательн[а-яё]*\s+медицинск[а-яё]*\s+страхован/.test(senderText)) {
-    return SOURCE_NAMES.insurance
-  }
-  if (/минздрав|министерство\s+здравоохранения\s+(российской\s+федерации|рф)/.test(senderText)) {
-    return SOURCE_NAMES.ministry
-  }
-  if (/управление\s+президента|администрац[а-яё]*\s+президента/.test(senderText)) {
-    return SOURCE_NAMES.president
-  }
-  if (/аппарат\s+губернатора|правительств[а-яё]*\s+ханты-мансийского|губернатор/.test(senderText)) {
-    return SOURCE_NAMES.governor
-  }
-  if (/департамент\s+здравоохранения|депздрав|паськов\s+роман/.test(senderText)) {
-    return SOURCE_NAMES.department
-  }
-  if (/росздравнадзор|служб[а-яё]*\s+по\s+надзор|территориальн[а-яё]*\s+орган.*надзор/.test(senderText)) {
-    return SOURCE_NAMES.oversight
-  }
-  if (/прокуратур/.test(senderText)) return SOURCE_NAMES.prosecutor
-  if (/уполномоченн[а-яё]*\s+по\s+прав|общественн[а-яё]*\s+палат/.test(senderText)) {
-    return SOURCE_NAMES.publicRights
-  }
+
+  // Орган-источник по сопроводительному документу — приоритетнее контура регистрации
+  const organization = classifyOrganizationSource(senderText)
+  if (organization) return organization
+
+  // Сопроводиловка есть, но отправитель не распознан — честный «не определён»,
+  // НЕ приписываем контуру регистрации (это и был баг с «Департаментом»).
   if (senderText) return SOURCE_NAMES.unknown
 
+  // Сопроводительного органа нет — определяем по префиксу № РК / индексу группы
   if (/^07\/19/i.test(idText) || /^07\/19/i.test(groupIndexText)) {
     return SOURCE_NAMES.chiefDoctor
   }
@@ -1206,37 +1195,28 @@ function hasSourceEvidence({
   )
 }
 
+const SOURCE_NAME_SET = new Set(Object.values(SOURCE_NAMES))
+
 function canonicalizeAppealSource(value) {
   const text = clean(value)
   if (!text) return SOURCE_NAMES.unknown
+
+  // Значение уже является каноническим именем источника — возвращаем как есть
+  if (SOURCE_NAME_SET.has(text)) return text
+
   const lower = text.toLocaleLowerCase('ru-RU')
 
-  if (/департамент\s+здравоохранения|депздрав/.test(lower)) {
-    return SOURCE_NAMES.department
-  }
-  if (/аппарат\s+губернатора|правительств\w*\s+ханты-мансийского|губернатор/.test(lower)) {
-    return SOURCE_NAMES.governor
-  }
-  if (/минздрав|министерство\s+здравоохранения\s+(российской\s+федерации|рф)/.test(lower)) {
-    return SOURCE_NAMES.ministry
-  }
-  if (/альфа|согаз|капитал\s+мс|страхов|тфомс|тофомс|\bомс\b/.test(lower)) {
-    return SOURCE_NAMES.insurance
-  }
-  if (/прокуратур/.test(lower)) return SOURCE_NAMES.prosecutor
-  if (/управление\s+президента|администрац\w*\s+президента/.test(lower)) {
-    return SOURCE_NAMES.president
-  }
-  if (/главн\w+\s+врач|ссту/.test(lower)) {
+  // Обращения на имя главного врача — внутренний канал, не «организация-источник»
+  if (/главн[а-яё]+\s+врач|ссту/.test(lower)) {
     return SOURCE_NAMES.chiefDoctor
   }
-  if (/росздравнадзор|роспотребнадзор|надзорн\w+\s+орган|служб\w*\s+по\s+надзор/.test(lower)) {
-    return SOURCE_NAMES.oversight
-  }
-  if (/уполномоченн\w*\s+по\s+прав|общественн\w+\s+палат/.test(lower)) {
-    return SOURCE_NAMES.publicRights
-  }
-  if (/пос\b|платформ\w+\s+обратн\w+\s+связ|вконтакте|\bvk\b|публичн\w+\s+интернет|личн\w+\s+при[её]м|\be-?mail\b|почт|епгу|заявител/.test(lower)) {
+
+  // Орган-источник по единому кириллице-безопасному классификатору
+  const organization = classifyOrganizationSource(text)
+  if (organization) return organization
+
+  // Каналы прямой подачи гражданином
+  if (/\bпос\b|платформ[а-яё]+\s+обратн[а-яё]+\s+связ|вконтакте|\bvk\b|публичн[а-яё]+\s+интернет|личн[а-яё]+\s+при[её]м|\be-?mail\b|почт|епгу/.test(lower)) {
     return SOURCE_NAMES.direct
   }
 

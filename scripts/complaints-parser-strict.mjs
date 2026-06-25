@@ -1,6 +1,7 @@
 import XLSX from 'xlsx'
 import {
   APPEAL_SOURCE_NAMES,
+  classifyOrganizationSource,
   OFFICIAL_RUBRICS,
   RUBRIC_ALIASES as CLASSIFIER_RUBRIC_ALIASES,
 } from './appeals-classifier.mjs'
@@ -35,11 +36,9 @@ const CHIEF_DOCTOR_SOURCE = APPEAL_SOURCE_NAMES.chiefDoctor
 const DEPARTMENT_SOURCE = APPEAL_SOURCE_NAMES.department
 const MINISTRY_SOURCE = APPEAL_SOURCE_NAMES.ministry
 const GOVERNOR_SOURCE = APPEAL_SOURCE_NAMES.governor
-const PRESIDENT_SOURCE = APPEAL_SOURCE_NAMES.president
 const ROSZDRAVNADZOR_SOURCE = APPEAL_SOURCE_NAMES.oversight
 const PROSECUTOR_SOURCE = APPEAL_SOURCE_NAMES.prosecutor
 const OMBUDSMAN_SOURCE = APPEAL_SOURCE_NAMES.publicRights
-const SURGUT_ADMINISTRATION_SOURCE = APPEAL_SOURCE_NAMES.direct
 const INSURANCE_SOURCE = APPEAL_SOURCE_NAMES.insurance
 const PUBLIC_SOURCE = APPEAL_SOURCE_NAMES.direct
 const POS_SOURCE = APPEAL_SOURCE_NAMES.direct
@@ -577,38 +576,10 @@ function parseSourceById(id) {
 }
 
 // Распознаёт орган-источник по свободному тексту («Сопровод. документ», «Кому»).
+// Делегирует единому кириллице-безопасному классификатору из appeals-classifier.
 // Возвращает '' если орган не определён.
 function matchOrganization(value) {
-  const text = clean(value).toLowerCase()
-  if (!text) return ''
-  if (
-    /альфа|согаз|капитал\s+мс|страхов|страхован|тфомс|тофомс|федеральн\w*\s+фонд\s+обязательн\w+\s+медицинск\w+\s+страхован|обязательн\w+\s+медицинск\w+\s+страхован|\bомс\b/.test(
-      text
-    )
-  ) {
-    return INSURANCE_SOURCE
-  }
-  if (/минздрав|министерство\s+здравоохранения\s+(российской\s+федерации|рф)/.test(text)) {
-    return MINISTRY_SOURCE
-  }
-  if (/управление\s+президента|администрац\w*\s+президента/.test(text)) {
-    return PRESIDENT_SOURCE
-  }
-  if (/аппарат\s+губернатора|правительств\w*\s+ханты-мансийского|губернатор/.test(text)) {
-    return GOVERNOR_SOURCE
-  }
-  if (/департамент\s+здравоохранения|депздрав|паськов\s+роман/.test(text)) {
-    return DEPARTMENT_SOURCE
-  }
-  if (/росздравнадзор|служб\w*\s+по\s+надзор|территориальн\w*\s+орган.*надзор/.test(text)) {
-    return ROSZDRAVNADZOR_SOURCE
-  }
-  if (/прокуратур/.test(text)) return PROSECUTOR_SOURCE
-  if (/уполномоченн\w*\s+по\s+прав/.test(text)) return OMBUDSMAN_SOURCE
-  if (/администрац\w*.*сургут|администрац\w*\s+муниципальн/.test(text)) {
-    return SURGUT_ADMINISTRATION_SOURCE
-  }
-  return ''
+  return classifyOrganizationSource(value)
 }
 
 function resolveDocumentSource({
@@ -688,37 +659,9 @@ function getReportSource(record) {
     return DEPARTMENT_SOURCE
   }
 
-  if (/министерство\s+здравоохранения\s+(российской\s+федерации|рф)|минздрав\s+россии/i.test(source)) {
-    return MINISTRY_SOURCE
-  }
-  if (/департамент\s+здравоохранения\s+ханты-мансийского/i.test(source)) {
-    return DEPARTMENT_SOURCE
-  }
-  if (/аппарат\s+губернатора|правительства\s+ханты-мансийского/i.test(source)) {
-    return GOVERNOR_SOURCE
-  }
-  if (/управление\s+президента/i.test(source)) {
-    return PRESIDENT_SOURCE
-  }
-  if (/прокуратур/i.test(source)) return PROSECUTOR_SOURCE
-  if (/следствен/i.test(source)) return 'Следственное управление'
-  if (/территориальный\s+орган.*(надзор|росздравнадзор)/i.test(source)) {
-    return ROSZDRAVNADZOR_SOURCE
-  }
-  if (/федеральная\s+служба.*надзор|росздравнадзор/i.test(source)) {
-    return ROSZDRAVNADZOR_SOURCE
-  }
-  if (/уполномоченн\w*\s+по\s+прав/i.test(source)) return OMBUDSMAN_SOURCE
-  if (/администрац\w*.*сургут|администрац\w*\s+муниципальн/i.test(source)) {
-    return SURGUT_ADMINISTRATION_SOURCE
-  }
-  if (
-    /альфа|капитал\s+мс|страх|фсс|пфр|социальн\w*\s+фонд|сфр|согаз|омс|обязательного\s+медицинского\s+страхования/i.test(
-      source
-    )
-  ) {
-    return INSURANCE_SOURCE
-  }
+  // Орган-источник по единому кириллице-безопасному классификатору
+  const organization = classifyOrganizationSource(source)
+  if (organization) return organization
 
   return APPEAL_SOURCE_NAMES.direct
 }

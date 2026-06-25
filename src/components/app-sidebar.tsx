@@ -51,6 +51,12 @@ const posNav: NavItem[] = [
   { title: 'Сообщения', url: '/pos-table', icon: <ListIcon /> },
 ]
 
+const sourceToggleButtonClass =
+  'relative z-10 flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-300 ease-out motion-reduce:transition-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+
+const sourceToggleActiveClass =
+  'text-sidebar-primary-foreground hover:bg-transparent hover:text-sidebar-primary-foreground'
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { pathname, search } = useLocation()
   const isPos = pathname === '/pos' || pathname === '/pos-table'
@@ -64,6 +70,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     pathname === '/slides'
       ? pathname
       : '/'
+  const sourceToggleActiveIndex = isPos
+    ? 2
+    : appealMode === 'external'
+      ? 1
+      : 0
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -80,7 +91,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <span className="text-base font-semibold">Civium</span>
                 </Link>
               </SidebarMenuButton>
-              <div className="ml-auto flex items-center gap-0.5">
+              <div className="relative ml-auto flex items-center gap-0.5">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-0 top-0 z-0 size-7 rounded-md bg-sidebar-primary transition-transform duration-300 ease-out motion-reduce:transition-none"
+                  style={{
+                    transform: `translate3d(calc(${sourceToggleActiveIndex} * (1.75rem + 0.125rem)), 0, 0)`,
+                  }}
+                />
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Link
@@ -88,10 +106,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       search={{ mode: 'chiefDoctor' }}
                       aria-label="Обращения на имя главного врача, 07/19"
                       className={cn(
-                        'flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                        sourceToggleButtonClass,
                         !isPos &&
                           appealMode === 'chiefDoctor' &&
-                          'bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
+                          sourceToggleActiveClass,
                       )}
                     >
                       <StethoscopeIcon className="size-4" />
@@ -108,10 +126,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       search={{ mode: 'external' }}
                       aria-label="Внешние обращения, 07- и 01-"
                       className={cn(
-                        'flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                        sourceToggleButtonClass,
                         !isPos &&
                           appealMode === 'external' &&
-                          'bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
+                          sourceToggleActiveClass,
                       )}
                     >
                       <BuildingsIcon className="size-4" />
@@ -128,9 +146,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       search={{ mode: appealMode }}
                       aria-label="Платформа обратной связи (ПОС)"
                       className={cn(
-                        'flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                        isPos &&
-                          'bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
+                        sourceToggleButtonClass,
+                        isPos && sourceToggleActiveClass,
                       )}
                     >
                       <ChatsCircleIcon className="size-4" />

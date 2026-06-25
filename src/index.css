@@ -366,7 +366,7 @@
 /* Печать слайдов — фиксированный масштаб A4, независимо от экранного скейла */
 @media print {
   html {
-    font-size: 15px;
+    font-size: 14px;
   }
 }
 
@@ -391,9 +391,18 @@
     visibility: visible !important;
   }
 
+  /* Дека позиционируется абсолютно от страницы. Sidebar-inset по умолчанию
+     position:relative — из-за этого дека считала отступ от него (сдвинутого на
+     ширину сайдбара), и слева появлялась серая полоса. Делаем его static, чтобы
+     контейнером стала сама страница и слайды шли на всю ширину. */
+  body[data-print='slides'] [data-slot='sidebar-inset'] {
+    position: static !important;
+  }
+
   body[data-print='slides'] .slides-deck {
     position: absolute;
     inset: 0 auto auto 0;
+    width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     max-width: none !important;
@@ -402,19 +411,36 @@
 
   body[data-print='slides'] .slide {
     width: 100% !important;
-    margin: 0 0 6mm 0 !important;
+    margin: 0 !important;
     border: 0 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
-    break-inside: avoid;
+    break-before: page;
     break-after: page;
     page-break-after: always;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
 
+  body[data-print='slides'] .slide:first-child {
+    break-before: avoid;
+  }
+
+  /* Слайды, умещающиеся на страницу (все кроме последнего — длинной таблицы
+     отделений), центрируем по вертикали: контент сидит по центру листа, а не
+     прижат к верху с пустотой снизу. */
+  body[data-print='slides'] .slide:not(:last-child) {
+    min-height: 185mm;
+    justify-content: center;
+  }
+
   body[data-print='slides'] .slide:last-child {
     break-after: auto;
     page-break-after: auto;
+  }
+
+  /* Секции отделений на слайде 4 не разрываем между страницами. */
+  body[data-print='slides'] .slide-section {
+    break-inside: avoid;
   }
 }

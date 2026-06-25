@@ -1,4 +1,4 @@
-export const APPEALS_CLASSIFIER_VERSION = 'sokb-2025'
+export const APPEALS_CLASSIFIER_VERSION = 'sokb-2026-06'
 
 export const THEMATIC_GROUPS = [
   {
@@ -218,6 +218,12 @@ export const APPEAL_SOURCE_NAMES = {
   oversight: 'Надзорные органы (Росздравнадзор, Роспотребнадзор)',
   publicRights:
     'Уполномоченный по правам человека / Общественная палата',
+  investigation: 'Следственные органы (СК России)',
+  regionalHealth: 'Органы здравоохранения других регионов',
+  federalGov: 'Аппарат Правительства РФ',
+  regionalAuthority: 'Иные органы власти ХМАО-Югры',
+  mse: 'Бюро медико-социальной экспертизы (МСЭ)',
+  police: 'Органы внутренних дел (МВД)',
   unknown: 'Источник не определён',
 }
 
@@ -262,4 +268,135 @@ export const APPEAL_SOURCES = [
     name: APPEAL_SOURCE_NAMES.publicRights,
     status: 'Опционально',
   },
+  {
+    name: APPEAL_SOURCE_NAMES.investigation,
+    status: 'Подтверждён',
+  },
+  {
+    name: APPEAL_SOURCE_NAMES.regionalHealth,
+    status: 'Подтверждён',
+  },
+  {
+    name: APPEAL_SOURCE_NAMES.federalGov,
+    status: 'Подтверждён',
+  },
+  {
+    name: APPEAL_SOURCE_NAMES.regionalAuthority,
+    status: 'Подтверждён',
+  },
+  {
+    name: APPEAL_SOURCE_NAMES.mse,
+    status: 'Подтверждён',
+  },
+  {
+    name: APPEAL_SOURCE_NAMES.police,
+    status: 'Подтверждён',
+  },
 ]
+
+// Кириллице-безопасное распознавание органа-источника по свободному тексту
+// («Сопровод. документ» / «От» / уже проставленное значение источника).
+// ВАЖНО: JS `\w` не матчит кириллицу, поэтому для «хвостов» слов используется
+// явный класс [а-яё], а не `\w`. Возвращает имя источника из
+// APPEAL_SOURCE_NAMES либо '' — если орган не распознан.
+export function classifyOrganizationSource(value) {
+  const text = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase('ru-RU')
+  if (!text) return ''
+
+  // Здравоохранение ДРУГИХ регионов — раньше Депздрава ХМАО и Минздрава РФ,
+  // чтобы «Депздрав Тюменской области» не попал в «Департамент ХМАО».
+  if (
+    /департамент\s+здравоохранения\s+(города\s+москвы|тюменской|города\s+севастополя|севастополя)/.test(text) ||
+    /правительство\s+севастополя/.test(text) ||
+    /министерство\s+здравоохранения\s+[а-яё]+ской\s+области/.test(text)
+  ) {
+    return APPEAL_SOURCE_NAMES.regionalHealth
+  }
+
+  // Страховые медицинские организации, фонды ОМС, СФР
+  if (
+    /альфа|согаз|капитал\s+мс|капитал\s+медицинск|страхов|страхован|тфомс|тофомс|обязательн[а-яё]+\s+медицинск[а-яё]+\s+страхован|фонд[а-яё]*\s+обязательн[а-яё]+\s+медицинск|пенсионн[а-яё]+\s+и\s+социальн[а-яё]+\s+страхован|социальн[а-яё]+\s+фонд\s+росси|\bсфр\b|\bомс\b/.test(
+      text
+    )
+  ) {
+    return APPEAL_SOURCE_NAMES.insurance
+  }
+
+  // Минздрав России
+  if (/минздрав\s+росси|министерство\s+здравоохранения\s+(российской\s+федерации|рф)\b/.test(text)) {
+    return APPEAL_SOURCE_NAMES.ministry
+  }
+
+  // Президент РФ (управление / приёмная / полпред / администрация президента)
+  if (/президент/.test(text)) {
+    return APPEAL_SOURCE_NAMES.president
+  }
+
+  // Аппарат Правительства РФ (федеральный) — раньше регионального губернатора
+  if (/аппарат\s+правительства\s+российской\s+федерац/.test(text)) {
+    return APPEAL_SOURCE_NAMES.federalGov
+  }
+
+  // Аппарат Губернатора / Правительства ХМАО-Югры
+  if (/аппарат\s+губернатора|правительств[а-яё]*\s+ханты-мансийск|губернатор/.test(text)) {
+    return APPEAL_SOURCE_NAMES.governor
+  }
+
+  // Надзорные органы: Росздравнадзор / Роспотребнадзор / служба по надзору
+  if (
+    /росздравнадзор|роспотребнадзор|служб[а-яё]*\s+по\s+надзор|надзор[а-яё]*\s+в\s+сфере|территориальн[а-яё]*\s+(орган|отдел)[а-яё\s]*надзор/.test(
+      text
+    )
+  ) {
+    return APPEAL_SOURCE_NAMES.oversight
+  }
+
+  // Следственный комитет
+  if (/следствен|\bск\s+рф\b/.test(text)) {
+    return APPEAL_SOURCE_NAMES.investigation
+  }
+
+  // Органы внутренних дел (МВД, полиция)
+  if (/министерств[а-яё]*\s+внутренних\s+дел|\bмвд\b|полици/.test(text)) {
+    return APPEAL_SOURCE_NAMES.police
+  }
+
+  // Прокуратура
+  if (/прокуратур/.test(text)) {
+    return APPEAL_SOURCE_NAMES.prosecutor
+  }
+
+  // Уполномоченный по правам человека / Общественная палата
+  if (/уполномоченн[а-яё]*\s+по\s+прав|общественн[а-яё]+\s+палат/.test(text)) {
+    return APPEAL_SOURCE_NAMES.publicRights
+  }
+
+  // Бюро медико-социальной экспертизы
+  if (/медико-социальн[а-яё]+\s+экспертиз|бюро\s+мсэ|\bмсэ\b/.test(text)) {
+    return APPEAL_SOURCE_NAMES.mse
+  }
+
+  // Департамент здравоохранения ХМАО-Югры
+  if (/департамент\s+здравоохранения\s+(ханты-мансийск|хмао)|депздрав\s+югры|депздрав|паськов\s+роман|добровольск/.test(text)) {
+    return APPEAL_SOURCE_NAMES.department
+  }
+
+  // Иные органы власти ХМАО-Югры (соцразвития, труд, внутр. политика, финансы, Дума)
+  if (
+    /департамент\s+социальн|депсоцразвития|департамент\s+труда|департамент\s+внутренн|департамент\s+финансов|департамент\s+образован|\bдума\s+ханты/.test(
+      text
+    )
+  ) {
+    return APPEAL_SOURCE_NAMES.regionalAuthority
+  }
+
+  // Муниципальные администрации — по решению заказчика остаются «напрямую от заявителя»
+  if (/администрац[а-яё]*\s+(город|г\.\s|сургутского\s+района|муниципальн)/.test(text)) {
+    return APPEAL_SOURCE_NAMES.direct
+  }
+
+  return ''
+}

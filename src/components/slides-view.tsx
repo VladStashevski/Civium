@@ -770,7 +770,7 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
         <Slide n={4} title={`Отделения и профили: ${periodLabel}`}>
           <div className="grid grid-cols-1 gap-4">
               {departmentSections.map((section) => (
-                <div key={section.profile} className="flex flex-col gap-1.5">
+                <div key={section.profile} className="slide-section flex flex-col gap-1.5">
                   <div
                     className="border-b-2 pb-1 text-[12px] font-bold tracking-wide uppercase"
                     style={{ color: section.color, borderColor: section.color }}
@@ -778,7 +778,7 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
                     {section.profile}
                   </div>
                   <div
-                    className="grid items-center gap-1 px-1 text-[9px] font-bold text-muted-foreground uppercase"
+                    className="grid items-center gap-1 px-1.5 text-[9px] font-bold text-muted-foreground uppercase"
                     style={{ gridTemplateColumns: departmentGridTemplate }}
                   >
                     <span>Отделение</span>
@@ -837,7 +837,7 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
                   {section.rows.map((row) => (
                     <div
                       key={row.name}
-                      className="grid items-center gap-1"
+                      className="grid items-center gap-1 px-1.5"
                       style={{ gridTemplateColumns: departmentGridTemplate }}
                     >
                       <span
