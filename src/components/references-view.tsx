@@ -231,11 +231,11 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
   // фона активного таба перестаёт дёргаться. Остальные таблицы лёгкие, их не трогаем.
   const departmentsTable = React.useMemo(
     () => (
-      <div className="overflow-hidden rounded-lg border">
-        <Table className="table-fixed">
+      <div className="overflow-x-auto overscroll-x-contain rounded-2xl border">
+        <Table className="min-w-[44rem] table-fixed xl:min-w-0">
           <TableHeader>
             <TableRow>
-              <TableHead>Отделение</TableHead>
+              <TableHead className="w-[34%]">Отделение</TableHead>
               <TableHead className="w-1/4">Профиль</TableHead>
               {comparisonHeaders}
             </TableRow>
@@ -320,8 +320,8 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
               <TabsContent
                 value="rubrics"
               >
-                <div className="overflow-hidden rounded-lg border">
-                  <Table className="table-fixed">
+                <div className="overflow-x-auto overscroll-x-contain rounded-2xl border">
+                  <Table className="min-w-[52rem] table-fixed xl:min-w-0">
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[26%]">Рубрика</TableHead>
@@ -358,8 +358,8 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
               <TabsContent
                 value="themes"
               >
-                <div className="overflow-hidden rounded-lg border">
-                  <Table className="table-fixed">
+                <div className="overflow-x-auto overscroll-x-contain rounded-2xl border">
+                  <Table className="min-w-[40rem] table-fixed xl:min-w-0">
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[30%] text-center">
@@ -391,8 +391,8 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
               <TabsContent
                 value="sources"
               >
-                <div className="overflow-hidden rounded-lg border">
-                  <Table className="table-fixed">
+                <div className="overflow-x-auto overscroll-x-contain rounded-2xl border">
+                  <Table className="min-w-[34rem] table-fixed xl:min-w-0">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Источник</TableHead>
@@ -414,11 +414,11 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
               <TabsContent
                 value="profiles"
               >
-                <div className="overflow-hidden rounded-lg border">
-                  <Table className="table-fixed">
+                <div className="overflow-x-auto overscroll-x-contain rounded-2xl border">
+                  <Table className="min-w-[56rem] table-fixed xl:min-w-0">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Профиль</TableHead>
+                        <TableHead className="w-40">Профиль</TableHead>
                         {profileMonths.map((month) => (
                           <TableHead
                             key={month}
@@ -477,7 +477,7 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
         <PopoverContent
           align="start"
           sideOffset={4}
-          className="max-h-80 w-auto max-w-md overflow-auto"
+          className="max-h-80 w-auto max-w-[min(28rem,calc(100vw-2rem))] overflow-auto"
         >
           <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
             {expand.text}

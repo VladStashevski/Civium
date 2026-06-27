@@ -34,7 +34,7 @@ export function DepartmentDistributionTabs({
           <CardDescription>
             Распределение {subject} по отделениям и профилям
           </CardDescription>
-          <CardAction className="col-span-full row-start-3 justify-self-start sm:col-span-auto sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:justify-self-end">
+          <CardAction className="col-span-full col-start-1 row-start-3 justify-self-start sm:col-span-auto sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:justify-self-end">
             <TabsList>
               <TabsTrigger value="departments">
                 Отделения

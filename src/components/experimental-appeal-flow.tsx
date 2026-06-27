@@ -113,7 +113,7 @@ export function ExperimentalAppealFlow({ mode }: { mode: AppealMode }) {
           <CardDescription>
             Куда стекаются обращения — топ-{TOP_N} связей выбранного маршрута
           </CardDescription>
-          <CardAction className="col-span-full row-start-3 justify-self-start sm:col-span-auto sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:justify-self-end">
+          <CardAction className="col-span-full col-start-1 row-start-3 justify-self-start sm:col-span-auto sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:justify-self-end">
             <ToggleGroup
               type="single"
               variant="outline"

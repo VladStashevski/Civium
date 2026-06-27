@@ -180,7 +180,11 @@ export function DateRangeFilter<T>({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 gap-4 p-4" align="start" sideOffset={6}>
+      <PopoverContent
+        className="w-[min(20rem,calc(100vw-2rem))] gap-4 p-4"
+        align="start"
+        sideOffset={6}
+      >
         <div className="flex items-center justify-between gap-2">
           <Button
             type="button"

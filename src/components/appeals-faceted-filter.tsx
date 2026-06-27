@@ -69,7 +69,7 @@ export function FacetedFilter<T>({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-auto min-w-52 max-w-80 gap-0 overflow-hidden p-0"
+        className="w-auto min-w-52 max-w-[min(20rem,calc(100vw-2rem))] gap-0 overflow-hidden p-0"
         align="start"
         sideOffset={6}
       >
