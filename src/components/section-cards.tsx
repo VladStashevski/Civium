@@ -1,6 +1,8 @@
 import {
-  IconChartBar,
+  IconCircleCheck,
+  IconCircleX,
   IconClipboardCheck,
+  IconFileX,
   IconHeartHandshake,
   IconInbox,
 } from '@tabler/icons-react'
@@ -24,7 +26,22 @@ import { cn } from '@/lib/utils'
 import type { AppealMode } from '@/lib/api'
 
 const cardWrapClass =
-  'grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card'
+  'grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-3 dark:*:data-[slot=card]:bg-card'
+
+type CardTone = 'badIncrease' | 'goodIncrease' | 'warning'
+type DashboardCard = {
+  description: string
+  current: number
+  previous: number
+  delta: number
+  deltaPercent: number | null
+  icon: typeof IconInbox
+  value: string
+  tone: CardTone
+  footTitle: string
+  footMeta?: string
+  badgeText?: string
+}
 
 export function SectionCards({ mode }: { mode: AppealMode }) {
   const { data, isPending } = useDashboard(mode)
@@ -32,7 +49,7 @@ export function SectionCards({ mode }: { mode: AppealMode }) {
   if (isPending || !data) {
     return (
       <div className={cardWrapClass}>
-        {Array.from({ length: 4 }).map((_, i) => (
+        {Array.from({ length: 6 }).map((_, i) => (
           <Card key={i} className="@container/card">
             <CardHeader>
               <Skeleton className="h-4 w-28" />
@@ -49,12 +66,11 @@ export function SectionCards({ mode }: { mode: AppealMode }) {
 
   const dashboard = normalizeDashboard(data)
   const { total, summary, comparison } = dashboard
-  const monthCount = Math.max(dashboard.byMonth.length, 1)
-  const currentMonthlyAverage = total / monthCount
-  const previousMonthlyAverage = comparison.previousTotal / monthCount
   const missingShare = total
     ? (summary.justificationMissingCount / total) * 100
     : 0
+  const shareText = (count: number) =>
+    total ? `${((count / total) * 100).toFixed(1).replace('.', ',')}%` : '0,0%'
   const metric = (current: number, previous: number) => ({
     current,
     previous,
@@ -62,7 +78,7 @@ export function SectionCards({ mode }: { mode: AppealMode }) {
     deltaPercent:
       previous === 0 ? (current === 0 ? 0 : null) : ((current - previous) / previous) * 100,
   })
-  const cards = [
+  const cards: DashboardCard[] = [
     {
       description: 'Обращения',
       ...metric(total, comparison.previousTotal),
@@ -72,21 +88,38 @@ export function SectionCards({ mode }: { mode: AppealMode }) {
       footTitle: `${comparison.previousYear}: ${comparison.previousTotal.toLocaleString('ru-RU')} · ${comparison.currentYear}: ${total.toLocaleString('ru-RU')}`,
     },
     {
-      description: 'Среднемесячно',
-      ...metric(currentMonthlyAverage, previousMonthlyAverage),
-      icon: IconChartBar,
-      value: currentMonthlyAverage.toLocaleString('ru-RU', {
-        maximumFractionDigits: 1,
-      }),
+      description: 'Прекращено',
+      ...metric(summary.discontinuedCount, comparison.previousSummary.discontinuedCount),
+      icon: IconFileX,
+      value: summary.discontinuedCount.toLocaleString('ru-RU'),
+      tone: 'warning',
+      footTitle: `${comparison.previousYear}: ${comparison.previousSummary.discontinuedCount.toLocaleString('ru-RU')} · ${comparison.currentYear}: ${summary.discontinuedCount.toLocaleString('ru-RU')}`,
+      footMeta: `${shareText(summary.discontinuedCount)} от обращений`,
+    },
+    {
+      description: 'Обоснованные',
+      ...metric(summary.justifiedCount, comparison.previousSummary.justifiedCount),
+      icon: IconCircleCheck,
+      value: summary.justifiedCount.toLocaleString('ru-RU'),
+      tone: 'goodIncrease',
+      footTitle: `${comparison.previousYear}: ${comparison.previousSummary.justifiedCount.toLocaleString('ru-RU')} · ${comparison.currentYear}: ${summary.justifiedCount.toLocaleString('ru-RU')}`,
+      footMeta: `${shareText(summary.justifiedCount)} от обращений`,
+    },
+    {
+      description: 'Необоснованные',
+      ...metric(summary.unjustifiedCount, comparison.previousSummary.unjustifiedCount),
+      icon: IconCircleX,
+      value: summary.unjustifiedCount.toLocaleString('ru-RU'),
       tone: 'badIncrease',
-      footTitle: `Нагрузка за ${monthCount} мес. сопоставимого периода`,
-      footMeta: `${comparison.previousYear}: ${previousMonthlyAverage.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} · ${comparison.currentYear}: ${currentMonthlyAverage.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}`,
+      footTitle: `${comparison.previousYear}: ${comparison.previousSummary.unjustifiedCount.toLocaleString('ru-RU')} · ${comparison.currentYear}: ${summary.unjustifiedCount.toLocaleString('ru-RU')}`,
+      footMeta: `${shareText(summary.unjustifiedCount)} от обращений`,
     },
     {
       description: 'Без оценки',
-      current: summary.justificationMissingCount,
-      previous: 0,
-      delta: summary.justificationMissingCount,
+      ...metric(
+        summary.justificationMissingCount,
+        comparison.previousSummary.justificationMissingCount,
+      ),
       deltaPercent: missingShare,
       icon: IconClipboardCheck,
       value: summary.justificationMissingCount.toLocaleString('ru-RU'),
@@ -130,6 +163,12 @@ export function SectionCards({ mode }: { mode: AppealMode }) {
                   card.tone === 'goodIncrease' &&
                     card.delta < 0 &&
                     'border-destructive/30 bg-destructive/5 text-destructive',
+                  card.tone === 'warning' &&
+                    card.delta > 0 &&
+                    'border-amber-500/30 bg-amber-500/5 text-amber-600',
+                  card.tone === 'warning' &&
+                    card.delta < 0 &&
+                    'border-positive/30 bg-positive/5 text-positive',
                 )}
               >
                 <card.icon />

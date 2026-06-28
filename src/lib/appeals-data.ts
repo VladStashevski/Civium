@@ -20,7 +20,9 @@ export type ComparisonSummary = {
   channelCount: number
   justifiedCount: number
   unjustifiedCount: number
+  justificationMissingCount: number
   gratitudeCount: number
+  discontinuedCount: number
 }
 
 export type AppealsSummary = {
@@ -29,6 +31,7 @@ export type AppealsSummary = {
   justifiedCount: number
   unjustifiedCount: number
   justificationMissingCount: number
+  discontinuedCount: number
   manualCount: number
   excelCount: number
   profileCount: number
@@ -68,6 +71,7 @@ const emptySummary: AppealsSummary = {
   justifiedCount: 0,
   unjustifiedCount: 0,
   justificationMissingCount: 0,
+  discontinuedCount: 0,
   manualCount: 0,
   excelCount: 0,
   profileCount: 0,
@@ -159,7 +163,9 @@ export function normalizeDashboard(value: unknown): AppealsDashboard {
       channelCount: numberValue(summary.channelCount),
       justifiedCount: numberValue(summary.justifiedCount),
       unjustifiedCount: numberValue(summary.unjustifiedCount),
+      justificationMissingCount: numberValue(summary.justificationMissingCount),
       gratitudeCount: numberValue(summary.gratitudeCount),
+      discontinuedCount: numberValue(summary.discontinuedCount),
     }
   }
 

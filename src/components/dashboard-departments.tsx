@@ -26,6 +26,9 @@ export function DepartmentDistributionTabs({
   dashboard: DepartmentDashboard
   subject: string
 }) {
+  const departments = dashboard.departments.filter((row) => row.count || row.previousCount)
+  const profiles = dashboard.profiles.filter((row) => row.count || row.previousCount)
+
   return (
     <Card>
       <Tabs defaultValue="departments" className="gap-0">
@@ -38,11 +41,11 @@ export function DepartmentDistributionTabs({
             <TabsList>
               <TabsTrigger value="departments">
                 Отделения
-                <Badge variant="secondary">{dashboard.departments.length}</Badge>
+                <Badge variant="secondary">{departments.length}</Badge>
               </TabsTrigger>
               <TabsTrigger value="profiles">
                 Профили
-                <Badge variant="secondary">{dashboard.profiles.length}</Badge>
+                <Badge variant="secondary">{profiles.length}</Badge>
               </TabsTrigger>
             </TabsList>
           </CardAction>
@@ -54,7 +57,7 @@ export function DepartmentDistributionTabs({
             className="data-[state=inactive]:hidden"
           >
             <DistributionRows
-              rows={dashboard.departments}
+              rows={departments}
               barClass="bg-positive"
               pctClass="text-positive"
               currentYear={dashboard.currentYear}
@@ -67,7 +70,7 @@ export function DepartmentDistributionTabs({
             className="data-[state=inactive]:hidden"
           >
             <DistributionRows
-              rows={dashboard.profiles}
+              rows={profiles}
               barClass="bg-primary"
               pctClass="text-primary"
               currentYear={dashboard.currentYear}

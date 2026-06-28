@@ -128,6 +128,7 @@ export function buildDashboardData(records, metadata = {}) {
     (record) => record.manualFields?.isJustified === false
   ).length
   const justificationMissingCount = total - justifiedCount - unjustifiedCount
+  const discontinuedCount = normalizedRecords.filter(isDiscontinuedRecord).length
   const previousSummary = buildSummary(previousRecords, {
     gratitudeCount: previousGratitudeCount,
   })
@@ -157,6 +158,7 @@ export function buildDashboardData(records, metadata = {}) {
       justifiedCount,
       unjustifiedCount,
       justificationMissingCount,
+      discontinuedCount,
       manualCount: normalizedRecords.filter((record) => record.origin === 'manual')
         .length,
       excelCount: normalizedRecords.filter((record) => record.origin === 'excel')
@@ -256,6 +258,10 @@ function buildSummary(records, extra = {}) {
   const externalRecords = records.filter(
     (record) => getAppealMode(record) === 'external'
   )
+  const justifiedCount = records.filter((record) => isJustified(record)).length
+  const unjustifiedCount = records.filter(
+    (record) => record.manualFields?.isJustified === false
+  ).length
   return {
     total: records.length,
     profileCount: countUnique(records.map((record) => record.profile)),
@@ -267,11 +273,11 @@ function buildSummary(records, extra = {}) {
         (record) => record.sourceChannel || record.delivery || 'Не указан'
       )
     ),
-    justifiedCount: records.filter((record) => isJustified(record)).length,
-    unjustifiedCount: records.filter(
-      (record) => record.manualFields?.isJustified === false
-    ).length,
+    justifiedCount,
+    unjustifiedCount,
+    justificationMissingCount: records.length - justifiedCount - unjustifiedCount,
     gratitudeCount: extra.gratitudeCount ?? records.filter(isGratitudeRecord).length,
+    discontinuedCount: records.filter(isDiscontinuedRecord).length,
   }
 }
 
@@ -289,6 +295,26 @@ export function isGratitudeRecord(record = {}) {
     ]
       .map(clean)
       .join(' ')
+  )
+}
+
+export function isDiscontinuedRecord(record = {}) {
+  return (
+    record.deadlineStatus === 'withdrawn' ||
+    /прекращен|прекращение|отзыв|отозван/i.test(
+      [
+        record.profile,
+        record.rubricCanonicalName,
+        record.rubricName,
+        record.rawRubric,
+        record.documentTopic,
+        record.officialCategory,
+        record.intent,
+        record.content,
+      ]
+        .map(clean)
+        .join(' ')
+    )
   )
 }
 

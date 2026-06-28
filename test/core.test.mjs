@@ -103,6 +103,33 @@ test('dashboard excludes gratitude from analytical totals but counts it separate
   )
 })
 
+test('dashboard counts discontinued appeals separately', () => {
+  const records = [
+    { ...makeRecord('2025-1'), dateIso: '2025-06-08', year: 2025 },
+    {
+      ...makeRecord('2025-2'),
+      dateIso: '2025-06-09',
+      year: 2025,
+      profile: 'Прекращение рассмотрения обращения',
+    },
+    { ...makeRecord('2026-1'), dateIso: '2026-06-08', year: 2026 },
+    {
+      ...makeRecord('2026-2'),
+      dateIso: '2026-06-09',
+      year: 2026,
+      deadlineStatus: 'withdrawn',
+    },
+  ]
+
+  const dashboard = buildDashboardData(records)
+
+  assert.equal(dashboard.summary.discontinuedCount, 1)
+  assert.equal(dashboard.comparison.currentSummary.discontinuedCount, 1)
+  assert.equal(dashboard.comparison.previousSummary.discontinuedCount, 1)
+  assert.equal(dashboard.summary.justificationMissingCount, 2)
+  assert.equal(dashboard.comparison.previousSummary.justificationMissingCount, 2)
+})
+
 test('dashboard compares current and previous years through the same date', () => {
   const records = [
     { ...makeRecord('2025-1'), dateIso: '2025-06-08', year: 2025 },
