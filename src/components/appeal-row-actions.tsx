@@ -213,9 +213,17 @@ export function DepartmentSelect({
     [value],
   )
   const selected = React.useMemo(() => new Set(canonicalValue), [canonicalValue])
-  const [activeProfile, setActiveProfile] = React.useState<string>(
-    DEPARTMENT_GROUPS[0].profile,
+  const firstSelectedProfile = React.useMemo(() => {
+    for (const name of canonicalValue) {
+      const option = DEPARTMENT_BY_NAME.get(name)
+      if (option) return option.profile
+    }
+    return DEPARTMENT_GROUPS[0].profile
+  }, [canonicalValue])
+  const [selectedProfile, setSelectedProfile] = React.useState<string | null>(
+    null,
   )
+  const activeProfile = selectedProfile ?? firstSelectedProfile
 
   const toggle = (name: string) => {
     onChange(
@@ -241,7 +249,27 @@ export function DepartmentSelect({
 
   return (
     <div className="flex min-w-0 flex-col">
-      <Tabs value={activeProfile} onValueChange={setActiveProfile}>
+      {canonicalValue.length > 0 && (
+        <div className="mb-2 flex min-w-0 flex-wrap gap-1.5">
+          {canonicalValue.map((name) => {
+            const option = DEPARTMENT_BY_NAME.get(name)
+            return (
+              <button
+                key={name}
+                type="button"
+                title={`Убрать: ${name}`}
+                onClick={() => toggle(name)}
+                className="max-w-full rounded-md border border-primary/35 bg-primary/10 px-2.5 py-1 text-left text-xs text-primary transition-[color,background-color,border-color,transform] duration-150 ease-out active:translate-y-px hover:border-primary/50 hover:bg-primary/15"
+              >
+                <span className="block truncate">
+                  {option ? departmentShortLabel(option) : name}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+      <Tabs value={activeProfile} onValueChange={setSelectedProfile}>
         <TabsList className="h-8 w-full">
           {DEPARTMENT_GROUPS.map((group) => {
             const count = countByProfile.get(group.profile) ?? 0
