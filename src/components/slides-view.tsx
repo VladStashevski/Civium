@@ -35,6 +35,7 @@ const effDepartments = (a: Appeal): string[] => {
 
 const numFmt = (n: number) => n.toLocaleString('ru-RU')
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`)
+const monthCode = (monthIndex: number) => String(monthIndex + 1).padStart(2, '0')
 const pctValue = (prev: number, cur: number): number | null =>
   prev === 0 ? (cur === 0 ? 0 : null) : ((cur - prev) / prev) * 100
 const pctText = (p: number | null) =>
@@ -45,6 +46,7 @@ const deltaClass = (d: number) =>
 type RankRow = { name: string; prev: number; cur: number }
 type MonthRow = { name: string; prev: number; cur: number }
 type ThemeColumn = { name: string; label: string; title: string }
+type PeriodMode = 'available' | 'years' | 'months'
 type DepartmentSlideRow = RankRow & {
   deltaPercent: number | null
   themes: Record<string, { prev: number; cur: number }>
@@ -408,8 +410,9 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
 
   const [selectedCurYear, setCurYear] = React.useState('')
   const [selectedPrevYear, setPrevYear] = React.useState('')
-  const [themes, setThemes] = React.useState<string[]>([]) // пусто = все
-  const [comparable, setComparable] = React.useState(true) // только сопоставимый период
+  const [periodMode, setPeriodMode] = React.useState<PeriodMode>('available')
+  const [selectedStartMonth, setStartMonth] = React.useState('01')
+  const [selectedEndMonth, setEndMonth] = React.useState('')
   const curYear = selectedCurYear || yearOptions[0] || ''
   const prevYear =
     selectedPrevYear || yearOptions[1] || (curYear ? String(Number(curYear) - 1) : '')
@@ -422,22 +425,45 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
     )
   }
 
-  const inThemes = (a: Appeal) => themes.length === 0 || themes.includes(a.rubricTheme ?? '')
-
-  const cutoffMonthDay =
+  const latestMonthDay =
     items
       .filter((item) => yearOf(item) === curYear)
       .map((item) => item.dateIso.slice(5))
       .filter(Boolean)
       .sort()
       .at(-1) ?? '12-31'
-  const monthsLimit = comparable ? Number(cutoffMonthDay.slice(0, 2)) || 12 : 12
+  const latestMonth = Math.min(Math.max(Number(latestMonthDay.slice(0, 2)) || 12, 1), 12)
+  const startMonthNumber = Math.min(
+    Math.max(Number(selectedStartMonth) || 1, 1),
+    latestMonth,
+  )
+  const rawEndMonthNumber = Number(selectedEndMonth) || latestMonth
+  const endMonthNumber = Math.min(
+    Math.max(rawEndMonthNumber, startMonthNumber),
+    latestMonth,
+  )
+  const periodStartMonth =
+    periodMode === 'months' ? monthCode(startMonthNumber - 1) : '01'
+  const periodEndMonth =
+    periodMode === 'years'
+      ? '12'
+      : monthCode((periodMode === 'months' ? endMonthNumber : latestMonth) - 1)
+  const periodStartMonthDay = `${periodStartMonth}-01`
+  const periodEndMonthDay =
+    periodMode === 'years'
+      ? '12-31'
+      : periodMode === 'available' || Number(periodEndMonth) === latestMonth
+        ? latestMonthDay
+        : `${periodEndMonth}-31`
+  const visibleStartMonth = Number(periodStartMonth)
+  const visibleEndMonth = Number(periodEndMonth)
   const inWindow = (appeal: Appeal) =>
-    !comparable || appeal.dateIso.slice(5) <= cutoffMonthDay
+    appeal.dateIso.slice(5) >= periodStartMonthDay &&
+    appeal.dateIso.slice(5) <= periodEndMonthDay
   const periodLabel =
-    !comparable || cutoffMonthDay === '12-31'
+    periodMode === 'years'
       ? `${prevYear} / ${curYear}`
-      : `01.01–${cutoffMonthDay.slice(3)}.${cutoffMonthDay.slice(0, 2)} · ${prevYear} / ${curYear}`
+      : `${periodStartMonthDay.slice(3)}.${periodStartMonthDay.slice(0, 2)}–${periodEndMonthDay.slice(3)}.${periodEndMonthDay.slice(0, 2)} · ${prevYear} / ${curYear}`
 
   const prevAll = items.filter((it) => yearOf(it) === prevYear && inWindow(it))
   const curAll = items.filter((it) => yearOf(it) === curYear && inWindow(it))
@@ -446,22 +472,25 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
   const aPrevItems = refPrevItems.filter((it) => !isDiscontinued(it))
   const aCurItems = refCurItems.filter((it) => !isDiscontinued(it))
 
-  // Аналитические слайды считают тот же состав, что справочники, плюс выбранные тематики.
-  const analysisPrev = refPrevItems.filter(inThemes)
-  const analysisCur = refCurItems.filter(inThemes)
+  const analysisPrev = refPrevItems
+  const analysisCur = refCurItems
 
   const monthly: MonthRow[] = MONTHS_SHORT.map((name, i) => {
-    const mm = String(i + 1).padStart(2, '0')
+    const mm = monthCode(i)
     const c = (arr: Appeal[]) => arr.filter((it) => monthOf(it) === mm).length
     return { name, prev: c(aPrevItems), cur: c(aCurItems) }
   })
-  const months = monthly.slice(0, monthsLimit)
+  const months = monthly.filter(
+    (_, index) => index + 1 >= visibleStartMonth && index + 1 <= visibleEndMonth,
+  )
 
   const deepMonthly: MonthRow[] = MONTHS_SHORT.map((name, i) => {
-    const mm = String(i + 1).padStart(2, '0')
+    const mm = monthCode(i)
     const c = (arr: Appeal[]) => arr.filter((it) => monthOf(it) === mm).length
     return { name, prev: c(analysisPrev), cur: c(analysisCur) }
-  }).slice(0, monthsLimit)
+  }).filter(
+    (_, index) => index + 1 >= visibleStartMonth && index + 1 <= visibleEndMonth,
+  )
 
   const sources = rankRows(analysisPrev, analysisCur, (appeal) => [
     mode === 'chiefDoctor'
@@ -522,6 +551,10 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
       .filter((row): row is DepartmentSlideRow => Boolean(row)),
   }))
   const departmentGridTemplate = `minmax(0,1fr) 2rem 2rem 3.6rem repeat(${themeColumns.length}, 2.4rem)`
+  const availableMonthOptions = MONTHS_SHORT.slice(0, latestMonth).map((name, index) => ({
+    label: name,
+    value: monthCode(index),
+  }))
 
   const yearSelect = (value: string, onChange: (v: string) => void) => (
     <Select value={value} onValueChange={onChange}>
@@ -537,6 +570,31 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
       </SelectContent>
     </Select>
   )
+  const monthSelect = (value: string, onChange: (v: string) => void) => (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger size="sm" className="w-[92px]">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent className="p-2">
+        {availableMonthOptions.map((month) => (
+          <SelectItem key={month.value} value={month.value}>
+            {month.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+  const periodButton = (modeValue: PeriodMode, label: string, title: string) => (
+    <Button
+      size="sm"
+      variant={periodMode === modeValue ? 'secondary' : 'outline'}
+      className="h-8 rounded-full"
+      title={title}
+      onClick={() => setPeriodMode(modeValue)}
+    >
+      {label}
+    </Button>
+  )
 
   return (
     <div className="flex flex-col gap-4">
@@ -546,57 +604,27 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
           {yearSelect(prevYear, setPrevYear)}
           <span className="text-muted-foreground">→</span>
           {yearSelect(curYear, setCurYear)}
-          <Button
-            size="sm"
-            variant={comparable ? 'secondary' : 'outline'}
-            className="ml-2 h-8 rounded-full"
-            onClick={() => setComparable((v) => !v)}
-            title="Сравнивать только период, который есть в неполном году"
-          >
-            Сопоставимый период
-            {comparable && monthsLimit < 12
-              ? ` · ${MONTHS_SHORT[0].toLowerCase()}–${MONTHS_SHORT[monthsLimit - 1].toLowerCase()}`
-              : ''}
-          </Button>
-        </div>
-        <div className="grid gap-2">
-          <span className="text-sm text-muted-foreground">Тематики анализа:</span>
-          <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 md:grid-cols-10">
-            <Button
-              size="sm"
-              variant={themes.length === 0 ? 'secondary' : 'outline'}
-              className="h-7 rounded-full px-2 text-xs"
-              onClick={() => setThemes([])}
-            >
-              Все
-            </Button>
-            {themeColumns.map((theme) => {
-              const active = themes.includes(theme.name)
-              return (
-                <Button
-                  key={theme.name}
-                  size="sm"
-                  variant={active ? 'secondary' : 'outline'}
-                  className="h-7 rounded-full px-2 text-xs"
-                  title={theme.title}
-                  onClick={() =>
-                    setThemes((prev) => {
-                      if (prev.length === 0) return [theme.name]
-
-                      const next = prev.includes(theme.name)
-                        ? prev.filter((item) => item !== theme.name)
-                        : [...prev, theme.name]
-                      return next.length === themeOptions.length || next.length === 0
-                        ? []
-                        : next
-                    })
-                  }
-                >
-                  {theme.label}
-                </Button>
-              )
-            })}
-          </div>
+          <span className="ml-0 text-sm text-muted-foreground lg:ml-3">Период:</span>
+          {periodButton(
+            'available',
+            'По данным',
+            'Сравнить одинаковый доступный период выбранных лет',
+          )}
+          {periodButton('years', 'Полные годы', 'Сравнить весь выбранный год')}
+          {periodButton('months', 'Месяцы', 'Выбрать диапазон месяцев')}
+          {periodMode === 'months' && (
+            <>
+              {monthSelect(periodStartMonth, (value) => {
+                setStartMonth(value)
+                if (Number(value) > endMonthNumber) setEndMonth(value)
+              })}
+              <span className="text-muted-foreground">→</span>
+              {monthSelect(periodEndMonth, (value) => {
+                setEndMonth(value)
+                if (Number(value) < startMonthNumber) setStartMonth(value)
+              })}
+            </>
+          )}
         </div>
       </div>
 
