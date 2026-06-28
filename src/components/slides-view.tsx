@@ -383,44 +383,6 @@ function RankTable({
   )
 }
 
-function ProfileCard({
-  row,
-  max,
-  prevYear,
-  curYear,
-}: {
-  row: RankRow
-  max: number
-  prevYear: string
-  curYear: string
-}) {
-  const d = row.cur - row.prev
-  return (
-    <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-sm leading-tight font-semibold" title={row.name}>
-          <span className="line-clamp-2">{row.name}</span>
-        </span>
-        <span className={cn('shrink-0 text-xl font-extrabold tabular-nums', deltaClass(d))}>
-          {signed(d)}
-        </span>
-      </div>
-      {[
-        { y: prevYear, v: row.prev, c: 'bg-emerald-500' },
-        { y: curYear, v: row.cur, c: 'bg-primary' },
-      ].map((x) => (
-        <div key={x.y} className="grid grid-cols-[2.5rem_minmax(0,1fr)_2rem] items-center gap-2 text-xs">
-          <span className="text-muted-foreground">{x.y}</span>
-          <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-            <div className={cn('h-full rounded-full', x.c)} style={{ width: `${(x.v / max) * 100}%` }} />
-          </div>
-          <span className="text-right font-bold tabular-nums">{x.v}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 // ---------- main ----------
 
 export function SlidesView({ mode }: { mode: AppealMode }) {
@@ -520,8 +482,7 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
     themeOptions,
     (a) => [a.rubricTheme || ''],
   )
-  const rubrics = rankRows(deepPrev, deepCur, (a) => [a.profile || '—']).slice(0, 4)
-  const rubricMax = Math.max(...rubrics.flatMap((p) => [p.prev, p.cur]), 1)
+  const rubrics = rankRows(deepPrev, deepCur, (a) => [a.profile || '—']).slice(0, 9)
 
   const just = (arr: Appeal[]) => ({
     yes: arr.filter((it) => it.manualFields?.isJustified === true).length,
@@ -746,7 +707,7 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
           </div>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div className="flex flex-col">
-              <span className="mb-2 text-sm font-bold">Тематики справочника</span>
+              <span className="mb-2 text-sm font-bold">Тематики обращений</span>
               <RankTable
                 rows={deepTopics}
                 prevYear={prevYear}
@@ -755,15 +716,13 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
               />
             </div>
             <div className="flex flex-col">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-sm font-bold">Рубрики обращений</span>
-                <Legend prevYear={prevYear} curYear={curYear} />
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                {rubrics.map((p) => (
-                  <ProfileCard key={p.name} row={p} max={rubricMax} prevYear={prevYear} curYear={curYear} />
-                ))}
-              </div>
+              <span className="mb-2 text-sm font-bold">Рубрики обращений</span>
+              <RankTable
+                rows={rubrics}
+                prevYear={prevYear}
+                curYear={curYear}
+                nameHeader="Рубрика"
+              />
             </div>
           </div>
         </Slide>
