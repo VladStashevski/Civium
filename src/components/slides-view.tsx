@@ -446,9 +446,9 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
   const aPrevItems = refPrevItems.filter((it) => !isDiscontinued(it))
   const aCurItems = refCurItems.filter((it) => !isDiscontinued(it))
 
-  // глубокий анализ (слайды 3–4) — с тем же составом, что справочники, плюс фильтр по темам
-  const deepPrev = refPrevItems.filter(inThemes)
-  const deepCur = refCurItems.filter(inThemes)
+  // Аналитические слайды считают тот же состав, что справочники, плюс выбранные тематики.
+  const analysisPrev = refPrevItems.filter(inThemes)
+  const analysisCur = refCurItems.filter(inThemes)
 
   const monthly: MonthRow[] = MONTHS_SHORT.map((name, i) => {
     const mm = String(i + 1).padStart(2, '0')
@@ -460,10 +460,10 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
   const deepMonthly: MonthRow[] = MONTHS_SHORT.map((name, i) => {
     const mm = String(i + 1).padStart(2, '0')
     const c = (arr: Appeal[]) => arr.filter((it) => monthOf(it) === mm).length
-    return { name, prev: c(deepPrev), cur: c(deepCur) }
+    return { name, prev: c(analysisPrev), cur: c(analysisCur) }
   }).slice(0, monthsLimit)
 
-  const sources = rankRows(refPrevItems, refCurItems, (appeal) => [
+  const sources = rankRows(analysisPrev, analysisCur, (appeal) => [
     mode === 'chiefDoctor'
       ? appeal.sourceChannel || 'Источник не определён'
       : appeal.sourceOrganizationDetail ||
@@ -471,29 +471,23 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
         'Источник не определён',
   ])
   const topics = countOfficialRows(
-    refPrevItems,
-    refCurItems,
+    analysisPrev,
+    analysisCur,
     themeOptions,
     (a) => [a.rubricTheme || ''],
   )
-  const deepTopics = countOfficialRows(
-    deepPrev,
-    deepCur,
-    themeOptions,
-    (a) => [a.rubricTheme || ''],
-  )
-  const rubrics = rankRows(deepPrev, deepCur, (a) => [a.profile || '—']).slice(0, 9)
+  const rubrics = rankRows(analysisPrev, analysisCur, (a) => [a.profile || '—']).slice(0, 9)
 
   const just = (arr: Appeal[]) => ({
     yes: arr.filter((it) => it.manualFields?.isJustified === true).length,
     no: arr.filter((it) => it.manualFields?.isJustified === false).length,
   })
-  const jPrev = just(deepPrev)
-  const jCur = just(deepCur)
+  const jPrev = just(analysisPrev)
+  const jCur = just(analysisCur)
 
   const departmentProfileRows = countOfficialRows(
-    deepPrev,
-    deepCur,
+    analysisPrev,
+    analysisCur,
     DEPARTMENT_GROUPS.map((group) => group.profile),
     departmentProfiles,
     themeColumns,
@@ -502,8 +496,8 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
     departmentProfileRows.map((row) => [row.name, row] as const),
   )
   const departmentRows = countOfficialRows(
-    deepPrev,
-    deepCur,
+    analysisPrev,
+    analysisCur,
     DEPARTMENT_OPTIONS.map((department) => department.value),
     officialDepartments,
     themeColumns,
@@ -566,33 +560,42 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
           </Button>
         </div>
         <div className="grid gap-2">
-          <span className="text-sm text-muted-foreground">Тематики для слайдов:</span>
-          <div className="grid grid-cols-3 gap-1.5 md:grid-cols-9">
-          {themeColumns.map((theme) => {
-            const active = themes.length === 0 || themes.includes(theme.name)
-            return (
-              <Button
-                key={theme.name}
-                size="sm"
-                variant={active ? 'secondary' : 'outline'}
-                className="h-7 rounded-full px-2 text-xs"
-                title={theme.title}
-                onClick={() =>
-                  setThemes((prev) => {
-                    const current = prev.length ? prev : themeOptions
-                    const next = current.includes(theme.name)
-                      ? current.filter((item) => item !== theme.name)
-                      : [...current, theme.name]
-                    return next.length === themeOptions.length || next.length === 0
-                      ? []
-                      : next
-                  })
-                }
-              >
-                {theme.label}
-              </Button>
-            )
-          })}
+          <span className="text-sm text-muted-foreground">Тематики анализа:</span>
+          <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 md:grid-cols-10">
+            <Button
+              size="sm"
+              variant={themes.length === 0 ? 'secondary' : 'outline'}
+              className="h-7 rounded-full px-2 text-xs"
+              onClick={() => setThemes([])}
+            >
+              Все
+            </Button>
+            {themeColumns.map((theme) => {
+              const active = themes.includes(theme.name)
+              return (
+                <Button
+                  key={theme.name}
+                  size="sm"
+                  variant={active ? 'secondary' : 'outline'}
+                  className="h-7 rounded-full px-2 text-xs"
+                  title={theme.title}
+                  onClick={() =>
+                    setThemes((prev) => {
+                      if (prev.length === 0) return [theme.name]
+
+                      const next = prev.includes(theme.name)
+                        ? prev.filter((item) => item !== theme.name)
+                        : [...prev, theme.name]
+                      return next.length === themeOptions.length || next.length === 0
+                        ? []
+                        : next
+                    })
+                  }
+                >
+                  {theme.label}
+                </Button>
+              )
+            })}
           </div>
         </div>
       </div>
@@ -659,14 +662,14 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
               <div className="text-[11px] font-bold text-muted-foreground uppercase">Всего в анализе</div>
               <div className="mt-3 flex items-center justify-center gap-4">
                 <div className="text-center">
-                  <div className="text-3xl font-extrabold tabular-nums text-emerald-600">{numFmt(deepPrev.length)}</div>
+                  <div className="text-3xl font-extrabold tabular-nums text-emerald-600">{numFmt(analysisPrev.length)}</div>
                   <div className="text-xs text-muted-foreground">{prevYear}</div>
                 </div>
-                <span className={cn('text-lg font-bold tabular-nums', deltaClass(deepCur.length - deepPrev.length))}>
-                  {signed(deepCur.length - deepPrev.length)}
+                <span className={cn('text-lg font-bold tabular-nums', deltaClass(analysisCur.length - analysisPrev.length))}>
+                  {signed(analysisCur.length - analysisPrev.length)}
                 </span>
                 <div className="text-center">
-                  <div className="text-3xl font-extrabold tabular-nums text-primary">{numFmt(deepCur.length)}</div>
+                  <div className="text-3xl font-extrabold tabular-nums text-primary">{numFmt(analysisCur.length)}</div>
                   <div className="text-xs text-muted-foreground">{curYear}</div>
                 </div>
               </div>
@@ -709,7 +712,7 @@ export function SlidesView({ mode }: { mode: AppealMode }) {
             <div className="flex flex-col">
               <span className="mb-2 text-sm font-bold">Тематики обращений</span>
               <RankTable
-                rows={deepTopics}
+                rows={topics}
                 prevYear={prevYear}
                 curYear={curYear}
                 nameHeader="Тематика"
