@@ -163,10 +163,11 @@ app.get('/api/references', async (request) => {
   const mode = getAppealModeFilter(request.query?.mode)
   const modeRecords = filterRecordsByMode(store.records, mode)
   const comparable = selectComparablePeriod(modeRecords)
-  const records = [...comparable.previous, ...comparable.current].filter(
+  const taxonomyRecords = [...comparable.previous, ...comparable.current]
+  const records = taxonomyRecords.filter(
     (record) => !isGratitudeRecord(record)
   )
-  const references = buildReferenceData(records)
+  const references = buildReferenceData(records, { taxonomyRecords })
   if (mode === 'chiefDoctor') {
     references.sources = buildChannelReferences(records)
   }

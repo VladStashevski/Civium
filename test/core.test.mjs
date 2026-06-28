@@ -165,6 +165,51 @@ test('references count department profiles by current-year months', () => {
   assert.equal(profile.months[2026]['03'], 1)
 })
 
+test('references keep gratitude in rubric and theme taxonomy only', () => {
+  const complaint = {
+    ...makeRecord('2026-complaint'),
+    dateIso: '2026-01-10',
+    year: 2026,
+    appealMode: 'external',
+    sourceOrganizationDetail: 'Источник жалобы',
+    rubricCanonicalName: 'Лечение и оказание медицинской помощи',
+    rubricName: 'Лечение и оказание медицинской помощи',
+    rubricTheme: 'Качество и оказание медицинской помощи',
+  }
+  const gratitude = {
+    ...makeRecord('2026-gratitude'),
+    dateIso: '2026-01-11',
+    year: 2026,
+    appealMode: 'external',
+    sourceOrganizationDetail: 'Источник благодарности',
+    content: 'Благодарность врачу и медицинским сестрам',
+    rubricCanonicalName:
+      'Благодарности, пожелания сотрудникам подведомственных учреждений',
+    rubricName:
+      'Благодарности, пожелания сотрудникам подведомственных учреждений',
+    rubricTheme: 'Благодарности и положительная обратная связь',
+  }
+
+  const references = buildReferenceData([complaint], {
+    taxonomyRecords: [complaint, gratitude],
+  })
+  const theme = references.themes.find(
+    (item) => item.name === 'Благодарности и положительная обратная связь',
+  )
+  const rubric = references.rubrics.find(
+    (item) =>
+      item.name ===
+      'Благодарности, пожелания сотрудникам подведомственных учреждений',
+  )
+
+  assert.equal(theme.years[2026], 1)
+  assert.equal(rubric.years[2026], 1)
+  assert.equal(
+    references.sources.some((item) => item.name === 'Источник благодарности'),
+    false,
+  )
+})
+
 test('store migration removes synthetic appeal status', () => {
   const store = migrateAppealsStore({
     records: [{ ...makeRecord('1'), status: 'active' }],

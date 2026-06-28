@@ -336,12 +336,14 @@ export function mergeExcelRowsIntoStore(store, rows, importMeta) {
   }
 }
 
-export function buildReferenceData(records) {
+export function buildReferenceData(records, options = {}) {
+  const taxonomyRecords = options.taxonomyRecords ?? records
+
   return {
     generatedAt: new Date().toISOString(),
     classifierVersion: APPEALS_CLASSIFIER_VERSION,
-    rubrics: buildRubricReferences(records),
-    themes: buildThematicGroupReferences(records),
+    rubrics: buildRubricReferences(taxonomyRecords),
+    themes: buildThematicGroupReferences(taxonomyRecords),
     sources: buildSourceReferences(records),
     profiles: buildDepartmentProfileReferences(records),
     departments: buildDepartmentReferences(records),
