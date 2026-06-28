@@ -183,11 +183,9 @@ test('references keep gratitude in rubric and theme taxonomy only', () => {
     appealMode: 'external',
     sourceOrganizationDetail: 'Источник благодарности',
     content: 'Благодарность врачу и медицинским сестрам',
-    rubricCanonicalName:
-      'Благодарности, пожелания сотрудникам подведомственных учреждений',
-    rubricName:
-      'Благодарности, пожелания сотрудникам подведомственных учреждений',
-    rubricTheme: 'Благодарности и положительная обратная связь',
+    rubricCanonicalName: 'Лечение и оказание медицинской помощи',
+    rubricName: 'Лечение и оказание медицинской помощи',
+    rubricTheme: 'Качество и оказание медицинской помощи',
   }
 
   const references = buildReferenceData([complaint], {

@@ -137,6 +137,9 @@ const RUBRIC_BY_NAME = new Map(OFFICIAL_RUBRICS.map((rubric) => [rubric.name, ru
 const RUBRIC_BY_CODE = new Map(OFFICIAL_RUBRICS.map((rubric) => [rubric.code, rubric]))
 
 const DEFAULT_CLASSIFIED_RUBRIC = RUBRIC_BY_NAME.get('Лечение и оказание медицинской помощи')
+const GRATITUDE_RUBRIC = RUBRIC_BY_NAME.get(
+  'Благодарности, пожелания сотрудникам подведомственных учреждений'
+)
 
 const RUBRIC_CLASSIFIER_RULES = [
   ['Благодарности, пожелания сотрудникам подведомственных учреждений', /благодар|спасибо|признательн|поощр/i, 100],
@@ -511,13 +514,15 @@ function buildRubricReferences(records) {
   )
 
   for (const record of records) {
-    const rubric = resolveOfficialRubric(
-      record.rubricCanonicalName ||
-        record.rubricName ||
-        normalizeRubricName(record.rawRubric) ||
-        record.profile,
-      record.rubricCode || extractRubricCode(record.rawRubric)
-    )
+    const rubric = isGratitudeReferenceRecord(record)
+      ? GRATITUDE_RUBRIC
+      : resolveOfficialRubric(
+          record.rubricCanonicalName ||
+            record.rubricName ||
+            normalizeRubricName(record.rawRubric) ||
+            record.profile,
+          record.rubricCode || extractRubricCode(record.rawRubric)
+        )
     if (!rubric) continue
 
     const item = rubrics.get(rubric.name)
@@ -530,6 +535,24 @@ function buildRubricReferences(records) {
   }
 
   return OFFICIAL_RUBRICS.map((rubric) => rubrics.get(rubric.name))
+}
+
+function isGratitudeReferenceRecord(record = {}) {
+  return /благодар|спасибо|признательн|поощр/i.test(
+    [
+      record.profile,
+      record.rubricCanonicalName,
+      record.rubricName,
+      record.rawRubric,
+      record.rubricTheme,
+      record.documentTopic,
+      record.officialCategory,
+      record.intent,
+      record.content,
+    ]
+      .map(clean)
+      .join(' ')
+  )
 }
 
 function buildThematicGroupReferences(records) {
@@ -549,7 +572,10 @@ function buildThematicGroupReferences(records) {
   )
 
   for (const record of records) {
-    const item = themes.get(record.rubricTheme)
+    const themeName = isGratitudeReferenceRecord(record)
+      ? GRATITUDE_RUBRIC?.theme
+      : record.rubricTheme
+    const item = themes.get(themeName)
     if (!item) continue
     item.count += 1
     if (record.year) item.years[record.year] = (item.years[record.year] ?? 0) + 1
