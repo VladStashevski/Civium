@@ -2,12 +2,6 @@ import * as React from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from '@/components/ui/card'
-import {
   Popover,
   PopoverAnchor,
   PopoverContent,
@@ -144,11 +138,16 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
   const { data, isPending } = useReferences(mode)
   const [tab, setTab] = usePersistentState('references:tab', 'rubrics')
   // Один общий поповер для раскрытия полного текста обрезанной ячейки. expand
-  // хранит текст и положение кликнутой ячейки; onExpand стабилен (useCallback),
-  // поэтому контекст не заставляет мемоизированные ячейки ре-рендериться.
-  const [expand, setExpand] = React.useState<{ text: string; rect: DOMRect } | null>(
-    null,
-  )
+  // хранит текст, саму кликнутую ячейку (anchor) и флаг open. Закрываем через
+  // open=false, НЕ обнуляя expand — иначе поповер размонтируется и Radix не успеет
+  // проиграть анимацию закрытия (пропадёт рывком). Текст/якорь остаются на месте до
+  // конца анимации. Привязка к anchor через virtualRef — поповер следует за ячейкой
+  // при скролле. handleCellClick стабилен (useCallback) и не ре-рендерит ячейки.
+  const [expand, setExpand] = React.useState<{
+    text: string
+    anchor: HTMLElement
+    open: boolean
+  } | null>(null)
   // Делегирование: проверяем переполнение на наведении и отмечаем только реально
   // обрезанные ячейки как кликабельные; клик по такой ячейке открывает общий поповер.
   const handleCellPointerOver = React.useCallback((event: React.PointerEvent) => {
@@ -162,12 +161,19 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
     const span = (event.target as HTMLElement).closest<HTMLElement>(
       '[data-truncatable]',
     )
-    if (span && span.scrollWidth > span.clientWidth + 1) {
-      setExpand({
-        text: span.textContent ?? '',
-        rect: span.getBoundingClientRect(),
-      })
-    }
+    if (!span) return
+    // Повторный клик по уже раскрытой ячейке закрывает поповер (toggle); клик по
+    // другой обрезанной ячейке переносит его туда. Закрытие по этому же клику у
+    // Radix запрещено (onInteractOutside ниже), иначе поповер закроется на
+    // pointerdown и тут же откроется на click — то самое «мигание/переоткрытие».
+    setExpand((prev) => {
+      // повторный клик по той же раскрытой ячейке — закрыть (с анимацией)
+      if (prev?.open && prev.anchor === span) return { ...prev, open: false }
+      if (span.scrollWidth > span.clientWidth + 1) {
+        return { text: span.textContent ?? '', anchor: span, open: true }
+      }
+      return prev
+    })
   }, [])
   const rubrics = data?.rubrics ?? []
   const themes = data?.themes ?? []
@@ -235,8 +241,11 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
         <Table className="min-w-[44rem] table-fixed xl:min-w-0">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[34%]">Отделение</TableHead>
-              <TableHead className="w-1/4">Профиль</TableHead>
+              {/* Отделение без фиксированной ширины — забирает всё свободное место
+                  (table-fixed отдаёт остаток колонке без width). Профиль — узкая
+                  фиксированная колонка по центру, без лишней пустоты. */}
+              <TableHead>Отделение</TableHead>
+              <TableHead className="w-56 text-center">Профиль</TableHead>
               {comparisonHeaders}
             </TableRow>
           </TableHeader>
@@ -244,7 +253,10 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
             {departmentsByProfile.map((d) => (
               <TableRow key={d.id}>
                 <TextCell value={d.name} className="font-medium" />
-                <TextCell value={d.profile} className="text-muted-foreground" />
+                <TextCell
+                  value={d.profile}
+                  className="text-center text-muted-foreground"
+                />
                 {comparisonCells(d)}
               </TableRow>
             ))}
@@ -257,24 +269,20 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
 
   return (
     <>
-    <div className="px-4 lg:px-6">
-      <Card>
-        <CardHeader>
-          <CardDescription>
-            {mode === 'chiefDoctor'
-              ? 'Рубрики, тематика, источники поступления и отделения для контура 07/19'
-              : 'Рубрики, тематика, источники и отделения для контуров 01-* и 07-*'}
-            {periodLabel && ` · ${periodLabel}`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isPending || !data ? (
-            <div className="flex flex-col gap-2">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
-              ))}
-            </div>
-          ) : (
+    <div className="flex flex-col gap-4 px-4 lg:px-6">
+      <p className="text-sm text-muted-foreground">
+        {mode === 'chiefDoctor'
+          ? 'Рубрики, тематика, источники поступления и отделения для контура 07/19'
+          : 'Рубрики, тематика, источники и отделения для контуров 01-* и 07-*'}
+        {periodLabel && ` · ${periodLabel}`}
+      </p>
+      {isPending || !data ? (
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-8 w-full" />
+          ))}
+        </div>
+      ) : (
             <Tabs
               value={tab}
               onValueChange={setTab}
@@ -457,27 +465,41 @@ export function ReferencesView({ mode }: { mode: AppealMode }) {
               </TabsContent>
             </Tabs>
           )}
-        </CardContent>
-      </Card>
     </div>
     {expand && (
-      <Popover open onOpenChange={(next) => !next && setExpand(null)}>
-        <PopoverAnchor asChild>
-          <div
-            aria-hidden
-            className="pointer-events-none fixed"
-            style={{
-              left: expand.rect.left,
-              top: expand.rect.top,
-              width: expand.rect.width,
-              height: expand.rect.height,
-            }}
-          />
-        </PopoverAnchor>
+      <Popover
+        open={expand.open}
+        onOpenChange={(next) =>
+          !next && setExpand((prev) => (prev ? { ...prev, open: false } : null))
+        }
+      >
+        {/* Якорь — сама ячейка (virtualRef): поповер «прикреплён» к ней и следует
+            за скроллом/ресайзом (Radix popper включает floating-ui autoUpdate),
+            а не висит на статичных координатах и не уезжает при прокрутке. */}
+        <PopoverAnchor virtualRef={{ current: expand.anchor }} />
         <PopoverContent
           align="start"
           sideOffset={4}
           className="max-h-80 w-auto max-w-[min(28rem,calc(100vw-2rem))] overflow-auto"
+          // Поповер — read-only подсказка: не забираем фокус. Заодно это убирает
+          // закрытие по focus-ветке Radix (focusOutside) при повторном клике.
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          // onInteractOutside перехватывает ОБА пути закрытия (pointer + focus). Если
+          // клик пришёлся по обрезанной ячейке (по той же раскрытой или по другой),
+          // решение отдаём нашему делегату-toggle; иначе поповер закрылся бы на
+          // pointerdown и тут же открылся на click. Клик вне таблицы закрывает как обычно.
+          onInteractOutside={(event) => {
+            const span = (
+              event.detail.originalEvent.target as HTMLElement | null
+            )?.closest?.('[data-truncatable]') as HTMLElement | null
+            if (
+              span &&
+              (span === expand.anchor ||
+                span.scrollWidth > span.clientWidth + 1)
+            ) {
+              event.preventDefault()
+            }
+          }}
         >
           <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
             {expand.text}

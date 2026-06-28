@@ -28,13 +28,6 @@ import {
   uniqueOptions,
 } from '@/components/appeals-table-columns'
 import { AppealsToolbar } from '@/components/appeals-table-toolbar'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -233,17 +226,12 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
   }, [mode])
 
   return (
-    <div className="px-4 lg:px-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Все обращения</CardTitle>
-          <CardDescription>
-            {mode === 'chiefDoctor'
-              ? 'Обращения на имя главного врача, контур регистрации 07/19'
-              : 'Обращения в адрес Депздрава Югры (контур регистрации 07-*) и Губернатора Югры (контур регистрации 01-*)'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 px-4 lg:px-6">
+      <p className="text-sm text-muted-foreground">
+        {mode === 'chiefDoctor'
+          ? 'Обращения на имя главного врача, контур регистрации 07/19'
+          : 'Обращения в адрес Депздрава Югры (контур регистрации 07-*) и Губернатора Югры (контур регистрации 01-*)'}
+      </p>
           <AppealsToolbar
             table={table}
             mode={mode}
@@ -283,7 +271,7 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
                       <TableHead
                         key={header.id}
                         className={cn(
-                          'sticky top-0 z-20 overflow-hidden bg-card transition-[width] duration-300 ease-out',
+                          'sticky top-0 z-20 overflow-hidden bg-background transition-[width] duration-300 ease-out',
                           CENTERED_COLUMN_IDS.has(header.column.id) &&
                             'text-center',
                           header.column.id === enteringColumnId &&
@@ -423,8 +411,6 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
                 )}
               </TableBody>
             </Table>
-        </CardContent>
-      </Card>
     </div>
   )
 }
