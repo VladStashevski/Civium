@@ -27,7 +27,10 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { buildDepartmentProfileTrend } from '@/lib/department-dashboard'
+import {
+  buildDepartmentProfileTrend,
+  type DepartmentProfileTrend,
+} from '@/lib/department-dashboard'
 import type { Appeal, PosMessage } from '@/lib/api'
 
 const MONTHS = [
@@ -111,12 +114,14 @@ function shortProfileName(profile: string): string {
 }
 
 export function DepartmentProfileTrendChart({
-  records,
+  records = [],
+  trend: trendProp,
   title,
   description,
   isPending,
 }: {
-  records: (Appeal | PosMessage)[]
+  records?: (Appeal | PosMessage)[]
+  trend?: DepartmentProfileTrend
   title: string
   description: string
   isPending?: boolean
@@ -124,7 +129,10 @@ export function DepartmentProfileTrendChart({
   const isMobile = useIsMobile()
   const prefersReducedMotion = usePrefersReducedMotion()
   const [selectedPeriod, setSelectedPeriod] = React.useState('current')
-  const trend = React.useMemo(() => buildDepartmentProfileTrend(records), [records])
+  const trend = React.useMemo(
+    () => trendProp ?? buildDepartmentProfileTrend(records),
+    [records, trendProp],
+  )
   const profileEntries = trend.profiles.map((profile, index) => ({
     profile,
     currentKey: `profile${index}Current`,

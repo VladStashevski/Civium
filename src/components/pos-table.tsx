@@ -1,6 +1,5 @@
 import * as React from 'react'
 import {
-  type Column,
   type ColumnFiltersState,
   type ColumnSizingState,
   type SortingState,
@@ -46,6 +45,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { usePos } from '@/hooks/use-pos'
+import { useColumnVisibilityTransition } from '@/hooks/use-column-visibility-transition'
 import { usePersistentState } from '@/hooks/use-persistent-state'
 import { useWindowVirtualRows } from '@/hooks/use-window-virtual-rows'
 import type { PosMessage } from '@/lib/api'
@@ -67,13 +67,8 @@ export function PosTable() {
   )
   const [pageIndex, setPageIndex] = React.useState(0)
   const [pageSize, setPageSize] = usePersistentState('pos-table:page-size', 20)
-  const [enteringColumnId, setEnteringColumnId] = React.useState<string | null>(
-    null,
-  )
-  const [exitingColumnId, setExitingColumnId] = React.useState<string | null>(
-    null,
-  )
-  const enteringColumnTimer = React.useRef<number | undefined>(undefined)
+  const { enteringColumnId, exitingColumnId, setColumnVisible } =
+    useColumnVisibilityTransition<PosMessage>()
   const [columnVisibility, setColumnVisibility] =
     usePersistentState<VisibilityState>('pos-table:visibility', {
       ...DEFAULT_HIDDEN,
@@ -166,37 +161,6 @@ export function PosTable() {
     rowAnimationKey,
   )
   const renderedRows = pageRows.slice(virtualRows.start, virtualRows.end)
-
-  React.useEffect(
-    () => () => window.clearTimeout(enteringColumnTimer.current),
-    [],
-  )
-
-  const setColumnVisible = (column: Column<PosMessage>, visible: boolean) => {
-    window.clearTimeout(enteringColumnTimer.current)
-
-    if (visible && !column.getIsVisible()) {
-      window.clearTimeout(enteringColumnTimer.current)
-      setEnteringColumnId(column.id)
-      column.toggleVisibility(true)
-      enteringColumnTimer.current = window.setTimeout(
-        () => setEnteringColumnId(null),
-        260,
-      )
-      return
-    }
-
-    if (!visible && column.getIsVisible()) {
-      setExitingColumnId(column.id)
-      enteringColumnTimer.current = window.setTimeout(() => {
-        column.toggleVisibility(false)
-        setExitingColumnId(null)
-      }, 220)
-      return
-    }
-
-    column.toggleVisibility(visible)
-  }
 
   return (
     <div className="px-4 lg:px-6">

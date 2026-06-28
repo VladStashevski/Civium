@@ -22,6 +22,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import {
   Tooltip,
@@ -59,6 +60,11 @@ const sourceToggleActiveClass =
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { pathname, search } = useLocation()
+  const { isMobile, setOpenMobile } = useSidebar()
+  // На мобильном сайдбар — overlay; уход по логотипу на дашборд закрывает его.
+  const closeOnMobile = () => {
+    if (isMobile) setOpenMobile(false)
+  }
   const isPos = pathname === '/pos' || pathname === '/pos-table'
   const appealMode: AppealMode =
     search.mode === 'external' ? 'external' : 'chiefDoctor'
@@ -86,7 +92,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 asChild
                 className="w-fit max-w-full data-[slot=sidebar-menu-button]:p-1.5!"
               >
-                <Link to="/" search={{ mode: appealMode }}>
+                <Link
+                  to="/"
+                  search={{ mode: appealMode }}
+                  onClick={closeOnMobile}
+                >
                   <CiviumLogo className="size-5! text-primary" />
                   <span className="text-base font-semibold">Civium</span>
                 </Link>

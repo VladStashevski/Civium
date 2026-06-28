@@ -1,11 +1,13 @@
+import * as React from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { AppealsTrendChart } from '@/components/appeals-trend-chart'
 import { DashboardBreakdowns } from '@/components/dashboard-breakdowns'
 import { DashboardDepartments } from '@/components/dashboard-departments'
 import { DepartmentProfileTrendChart } from '@/components/department-profile-trend-chart'
 import { SectionCards } from '@/components/section-cards'
-import { useAppeals } from '@/hooks/use-appeals'
+import { useReferences } from '@/hooks/use-appeals'
 import { parseAppealModeSearch } from '@/lib/appeal-mode'
+import { buildDepartmentProfileTrendFromReferences } from '@/lib/department-dashboard'
 
 export const Route = createFileRoute('/')({
   validateSearch: parseAppealModeSearch,
@@ -14,7 +16,12 @@ export const Route = createFileRoute('/')({
 
 function DashboardPage() {
   const { mode } = Route.useSearch()
-  const { data, isPending } = useAppeals(mode)
+  const { data: references, isPending: referencesPending } = useReferences(mode)
+  const departmentTrend = React.useMemo(
+    () =>
+      references ? buildDepartmentProfileTrendFromReferences(references) : undefined,
+    [references],
+  )
 
   return (
     <>
@@ -24,10 +31,10 @@ function DashboardPage() {
       </div>
       <div className="px-4 lg:px-6">
         <DepartmentProfileTrendChart
-          records={data?.items ?? []}
+          trend={departmentTrend}
           title="Динамика по профилям"
           description={mode === 'chiefDoctor' ? 'контур 07/19' : 'внешние контуры'}
-          isPending={isPending}
+          isPending={referencesPending}
         />
       </div>
       <DashboardBreakdowns mode={mode} />

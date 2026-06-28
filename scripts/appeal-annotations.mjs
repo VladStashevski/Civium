@@ -14,6 +14,7 @@
 export function hasAnnotationContent(manualFields) {
   return (
     manualFields?.isJustified !== undefined ||
+    Boolean(String(manualFields?.inspection ?? '').trim()) ||
     Boolean(String(manualFields?.notes ?? '').trim()) ||
     Boolean(String(manualFields?.issues ?? '').trim()) ||
     Boolean(manualFields?.departments?.length)

@@ -1,6 +1,6 @@
 import * as React from 'react'
 
-const VIRTUAL_ROW_HEIGHT = 49
+const DEFAULT_VIRTUAL_ROW_HEIGHT = 49
 const VIRTUAL_OVERSCAN = 8
 
 /**
@@ -11,6 +11,8 @@ const VIRTUAL_OVERSCAN = 8
  */
 export function useWindowVirtualRows(count: number, refreshKey: string) {
   const bodyRef = React.useRef<HTMLTableSectionElement>(null)
+  const rowHeightRef = React.useRef(DEFAULT_VIRTUAL_ROW_HEIGHT)
+  const [rowHeight, setRowHeight] = React.useState(DEFAULT_VIRTUAL_ROW_HEIGHT)
   const [range, setRange] = React.useState(() => ({
     start: 0,
     end: Math.min(count, 40),
@@ -18,6 +20,19 @@ export function useWindowVirtualRows(count: number, refreshKey: string) {
 
   React.useEffect(() => {
     let frame = 0
+    let resizeObserver: ResizeObserver | null = null
+
+    const measureRowHeight = (element: HTMLTableSectionElement) => {
+      const row = element.querySelector<HTMLTableRowElement>(
+        'tr:not([aria-hidden="true"])',
+      )
+      const measured = row?.getBoundingClientRect().height ?? 0
+      if (measured <= 0 || Math.abs(measured - rowHeightRef.current) < 0.5) {
+        return
+      }
+      rowHeightRef.current = measured
+      setRowHeight(measured)
+    }
 
     const update = () => {
       frame = 0
@@ -31,20 +46,22 @@ export function useWindowVirtualRows(count: number, refreshKey: string) {
         return
       }
 
+      measureRowHeight(element)
+      const measuredRowHeight = rowHeightRef.current
       const rect = element.getBoundingClientRect()
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight
       const visibleTop = Math.max(0, -rect.top)
       const visibleBottom = Math.min(
-        count * VIRTUAL_ROW_HEIGHT,
+        count * measuredRowHeight,
         visibleTop + viewportHeight,
       )
       const start = Math.max(
         0,
-        Math.floor(visibleTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN,
+        Math.floor(visibleTop / measuredRowHeight) - VIRTUAL_OVERSCAN,
       )
       const end = Math.min(
         count,
-        Math.ceil(visibleBottom / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN,
+        Math.ceil(visibleBottom / measuredRowHeight) + VIRTUAL_OVERSCAN,
       )
 
       setRange((current) =>
@@ -60,10 +77,15 @@ export function useWindowVirtualRows(count: number, refreshKey: string) {
     }
 
     update()
+    if (bodyRef.current) {
+      resizeObserver = new ResizeObserver(schedule)
+      resizeObserver.observe(bodyRef.current)
+    }
     window.addEventListener('scroll', schedule, { passive: true })
     window.addEventListener('resize', schedule)
     return () => {
       if (frame) window.cancelAnimationFrame(frame)
+      resizeObserver?.disconnect()
       window.removeEventListener('scroll', schedule)
       window.removeEventListener('resize', schedule)
     }
@@ -73,7 +95,7 @@ export function useWindowVirtualRows(count: number, refreshKey: string) {
     bodyRef,
     start: range.start,
     end: range.end,
-    before: range.start * VIRTUAL_ROW_HEIGHT,
-    after: Math.max(0, (count - range.end) * VIRTUAL_ROW_HEIGHT),
+    before: range.start * rowHeight,
+    after: Math.max(0, (count - range.end) * rowHeight),
   }
 }

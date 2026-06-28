@@ -6,11 +6,14 @@ import {
 } from '../scripts/complaints-parser.mjs'
 import {
   buildReferenceData,
+  getRecordKey,
   mergeExcelRowsIntoStore,
   migrateAppealsStore,
   normalizeAppealExcelRows,
+  pickManualFields,
   readAppealExcelRows,
 } from '../scripts/appeals-store.mjs'
+import { syncAnnotationTimestamps } from '../scripts/appeal-annotations.mjs'
 import { normalizePosRecords } from '../scripts/pos-parser.mjs'
 import { mergePosRecords } from '../scripts/pos-store.mjs'
 import {
@@ -354,6 +357,60 @@ test('reimport replaces the Excel snapshot and preserves manual data', () => {
   )
 })
 
+test('inspection-only appeal annotation keeps timestamps', () => {
+  const manualFields = { inspection: 'vnk' }
+
+  syncAnnotationTimestamps(manualFields, '2026-06-17T10:00:00.000Z')
+
+  assert.equal(manualFields.annotationCreatedAt, '2026-06-17T10:00:00.000Z')
+  assert.equal(manualFields.annotationUpdatedAt, '2026-06-17T10:00:00.000Z')
+})
+
+test('appeal manual field picker whitelists and normalizes request data', () => {
+  const manualFields = pickManualFields({
+    manualFields: {
+      annotationCreatedAt: '2020-01-01T00:00:00.000Z',
+      hidden: 'should not be stored',
+      isJustified: 'false',
+      notes: '  Проверено  ',
+      departments: ['Невро', '', 'Неврологическое отделение'],
+      inspection: 'bad-value',
+    },
+    isJustified: false,
+    inspection: 'vnk',
+  })
+
+  assert.deepEqual(manualFields, {
+    notes: 'Проверено',
+    isJustified: false,
+    inspection: 'vnk',
+    departments: ['Неврологическое отделение'],
+  })
+})
+
+test('appeal import keeps rows without registration number distinct', () => {
+  const result = mergeExcelRowsIntoStore(
+    { records: [], imports: [] },
+    [
+      makeExcelRow('', 'E-mail', 'Первое обращение без номера'),
+      makeExcelRow('', 'Почта', 'Второе обращение без номера'),
+    ],
+    {
+      importId: 'no-rk-import',
+      sourceFile: 'no-rk.xls',
+      storedFilename: 'no-rk.xls',
+    },
+  )
+
+  assert.equal(result.importedRecords.length, 2)
+  assert.equal(result.duplicateCount, 0)
+  assert.equal(result.store.records.length, 2)
+  assert.equal(
+    new Set(result.store.records.map((record) => getRecordKey(record))).size,
+    2,
+  )
+})
+
 test('appeal import handles PrintResult-style duplicated headers', () => {
   const workbook = XLSX.utils.book_new()
   const sheet = XLSX.utils.aoa_to_sheet([
@@ -520,7 +577,9 @@ test('pos reimport enriches shared store and preserves manual fields', () => {
 
   assert.equal(second.addedCount, 1)
   assert.equal(second.updatedCount, 1)
-  assert.equal(second.removedCount, 1)
+  // Импорт ПОС additive: запись «200» из прошлой выгрузки сохраняется (она ниже
+  // в списке records), поэтому удалённых нет, а сохранённая учтена отдельно.
+  assert.equal(second.removedCount, 0)
   assert.equal(second.preservedManualFieldsCount, 1)
   assert.equal(second.keptExistingCount, 1)
   assert.deepEqual(

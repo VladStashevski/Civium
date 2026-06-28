@@ -1,6 +1,5 @@
 import * as React from 'react'
 import {
-  type Column,
   type ColumnFiltersState,
   type ColumnSizingState,
   type SortingState,
@@ -46,6 +45,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useAppeals } from '@/hooks/use-appeals'
+import { useColumnVisibilityTransition } from '@/hooks/use-column-visibility-transition'
 import { usePersistentState } from '@/hooks/use-persistent-state'
 import { useWindowVirtualRows } from '@/hooks/use-window-virtual-rows'
 import type { Appeal, AppealMode } from '@/lib/api'
@@ -95,13 +95,8 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
     `appeals-table:${mode}:page-size`,
     20,
   )
-  const [enteringColumnId, setEnteringColumnId] = React.useState<string | null>(
-    null,
-  )
-  const [exitingColumnId, setExitingColumnId] = React.useState<string | null>(
-    null,
-  )
-  const enteringColumnTimer = React.useRef<number | undefined>(undefined)
+  const { enteringColumnId, exitingColumnId, setColumnVisible } =
+    useColumnVisibilityTransition<Appeal>()
   const [columnVisibility, setColumnVisibility] =
     usePersistentState<VisibilityState>(`appeals-table:${mode}:visibility`, {
       ...DEFAULT_HIDDEN,
@@ -236,37 +231,6 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
     setGlobalFilter('')
     setPageIndex(0)
   }, [mode])
-
-  React.useEffect(
-    () => () => window.clearTimeout(enteringColumnTimer.current),
-    [],
-  )
-
-  const setColumnVisible = (column: Column<Appeal>, visible: boolean) => {
-    window.clearTimeout(enteringColumnTimer.current)
-
-    if (visible && !column.getIsVisible()) {
-      window.clearTimeout(enteringColumnTimer.current)
-      setEnteringColumnId(column.id)
-      column.toggleVisibility(true)
-      enteringColumnTimer.current = window.setTimeout(
-        () => setEnteringColumnId(null),
-        260,
-      )
-      return
-    }
-
-    if (!visible && column.getIsVisible()) {
-      setExitingColumnId(column.id)
-      enteringColumnTimer.current = window.setTimeout(() => {
-        column.toggleVisibility(false)
-        setExitingColumnId(null)
-      }, 220)
-      return
-    }
-
-    column.toggleVisibility(visible)
-  }
 
   return (
     <div className="px-4 lg:px-6">

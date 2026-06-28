@@ -58,7 +58,11 @@ export function LoginForm() {
         </div>
 
         {loginMutation.isError && (
-          <p className="text-sm text-destructive">Неверная почта или пароль</p>
+          <p className="text-sm text-destructive">
+            {loginMutation.error instanceof Error
+              ? loginMutation.error.message
+              : 'Не удалось войти'}
+          </p>
         )}
 
         <Button type="submit" className="w-full" disabled={loginMutation.isPending}>

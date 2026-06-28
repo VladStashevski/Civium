@@ -19,7 +19,7 @@ import {
   readAppealExcelRows,
 } from '../scripts/appeals-store.mjs'
 import { syncAnnotationTimestamps } from '../scripts/appeal-annotations.mjs'
-import { createPosRepository } from '../scripts/pos-store.mjs'
+import { createPosRepository, preparePosImport } from '../scripts/pos-store.mjs'
 
 const rootDir = process.cwd()
 const dataDir = process.env.DATA_DIR
@@ -29,6 +29,8 @@ const uploadDir = process.env.UPLOAD_DIR
   ? path.resolve(process.env.UPLOAD_DIR)
   : path.join(rootDir, 'uploads')
 const storeFile = path.join(dataDir, 'complaints-store.json')
+const backupDir = path.join(dataDir, 'backups')
+const maxStoreBackups = Number(process.env.CIVIUM_MAX_BACKUPS ?? 10)
 const initialExcelFile = path.join(rootDir, 'statistic.xls')
 const posSeedFile = path.join(rootDir, 'pos-seed.xlsx')
 const posRepo = createPosRepository({ dataDir, seedFile: posSeedFile })
@@ -52,6 +54,7 @@ const loginAttemptLimit = 10
 const loginAttempts = new Map()
 let storeMutationQueue = Promise.resolve()
 let storeCache = null
+let storeReadInFlight = null
 let storeIndex = createEmptyStoreIndex()
 
 if (
@@ -72,6 +75,28 @@ await app.register(multipart, {
     fileSize: 20 * 1024 * 1024,
   },
 })
+
+// Единая обёртка ошибок: логируем полностью, наружу отдаём только статус и
+// безопасное сообщение (детали 5xx не утекают клиенту).
+app.setErrorHandler((error, request, reply) => {
+  request.log.error(error)
+  const status =
+    typeof error.statusCode === 'number' && error.statusCode >= 400
+      ? error.statusCode
+      : 500
+  reply
+    .code(status)
+    .send({ error: status >= 500 ? 'internal server error' : error.message })
+})
+
+// Периодически вычищаем просроченные окна лимита логина, чтобы Map не рос
+// неограниченно при попытках с множества IP. unref — не держим процесс живым.
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, attempt] of loginAttempts) {
+    if (attempt.resetAt <= now) loginAttempts.delete(key)
+  }
+}, loginWindowMs).unref()
 
 app.get('/api/health', async () => ({ ok: true }))
 
@@ -155,10 +180,35 @@ app.get('/api/references', async (request) => {
   }
 })
 
+// Внутренние/тяжёлые поля записи, которые клиенту не нужны: `raw` (исходная
+// строка Excel) — это ~68% веса записи. Проекция режет ответ /api/appeals с
+// ~17.7 МБ до ~3.2 МБ (−82%) без потери того, что реально читает фронт.
+const OMITTED_APPEAL_FIELDS = new Set([
+  'raw',
+  'normalized',
+  'importHistory',
+  'groupDocuments',
+  'correspondentRaw',
+  'deadlineRaw',
+  'completedAtRaw',
+  'rubricClassification',
+  'rowNumber',
+  'lastSeenImportId',
+  'duplicateRowNumbers',
+])
+
+function toAppealDto(record) {
+  const dto = {}
+  for (const key of Object.keys(record)) {
+    if (!OMITTED_APPEAL_FIELDS.has(key)) dto[key] = record[key]
+  }
+  return dto
+}
+
 app.get('/api/appeals', async (request) => {
   const store = await readStore()
-  const limit = Math.min(Math.max(Number(request.query?.limit ?? 25), 1), 100000)
-  const offset = Math.max(Number(request.query?.offset ?? 0), 0)
+  const limit = clampInteger(request.query?.limit, 25, 1, 100000)
+  const offset = clampInteger(request.query?.offset, 0, 0, Number.MAX_SAFE_INTEGER)
   const query = cleanQueryValue(request.query?.q).toLocaleLowerCase('ru-RU')
   const records = filterRecordsByMode(store.records, request.query?.mode)
     .slice()
@@ -187,7 +237,7 @@ app.get('/api/appeals', async (request) => {
     })
 
   return {
-    items: records.slice(offset, offset + limit),
+    items: records.slice(offset, offset + limit).map(toAppealDto),
     total: records.length,
     limit,
     offset,
@@ -232,6 +282,12 @@ app.patch('/api/appeals', async (request, reply) => {
   if (!uid && !id && !appealKey) {
     return reply.code(400).send({ error: 'uid, id or appealKey is required' })
   }
+  if (isInvalidOptionalBoolean(isJustified)) {
+    return reply.code(400).send({ error: 'isJustified must be boolean or null' })
+  }
+  if (isInvalidInspection(request.body?.inspection)) {
+    return reply.code(400).send({ error: 'inspection must be vnk or service' })
+  }
 
   const record = await mutateStore((store) => {
     const current = findStoreRecord(store, { uid, id, appealKey })
@@ -242,8 +298,8 @@ app.patch('/api/appeals', async (request, reply) => {
     if (isJustified === null) {
       delete current.manualFields?.isJustified
       delete manualFields.isJustified
-    } else if (isJustified !== undefined) {
-      manualFields.isJustified = Boolean(isJustified)
+    } else if (typeof isJustified === 'boolean') {
+      manualFields.isJustified = isJustified
     }
     for (const key of ['responsible', 'notes', 'issues', 'inspection']) {
       if (request.body?.[key] !== undefined && !String(request.body[key]).trim()) {
@@ -252,12 +308,10 @@ app.patch('/api/appeals', async (request, reply) => {
       }
     }
     if (request.body?.departments !== undefined) {
-      const departments = Array.isArray(request.body.departments)
-        ? request.body.departments.map((item) => String(item).trim()).filter(Boolean)
-        : []
-      if (departments.length) {
-        manualFields.departments = departments
-      } else {
+      if (
+        !Array.isArray(request.body.departments) ||
+        !manualFields.departments?.length
+      ) {
         delete current.manualFields?.departments
         delete manualFields.departments
       }
@@ -293,7 +347,7 @@ app.patch('/api/appeals', async (request, reply) => {
     return reply.code(404).send({ error: 'appeal not found' })
   }
 
-  return { item: record }
+  return { item: toAppealDto(record) }
 })
 
 app.post('/api/imports/excel', async (request, reply) => {
@@ -318,14 +372,27 @@ app.post('/api/imports/excel', async (request, reply) => {
   await fs.mkdir(uploadDir, { recursive: true })
   await fs.writeFile(path.join(uploadDir, storedFilename), buffer)
 
-  const merge = await mutateStore((store) => {
+  const merge = await mutateStore(async (store) => {
+    const backupFile = await backupStoreFile()
     const result = mergeExcelRowsIntoStore(store, rows, {
       importId,
       sourceFile: safeFilename,
       storedFilename,
     })
-    return { nextStore: result.store, result }
+    return { nextStore: result.store, result: { ...result, backupFile } }
   })
+
+  if (merge.removedCount > 0) {
+    request.log.warn(
+      {
+        importId,
+        sourceFile: safeFilename,
+        removedCount: merge.removedCount,
+        backupFile: merge.backupFile,
+      },
+      'excel import dropped existing records not present in the uploaded file',
+    )
+  }
 
   return {
     importId,
@@ -336,6 +403,7 @@ app.post('/api/imports/excel', async (request, reply) => {
     removedCount: merge.removedCount,
     manualFieldsPreserved: merge.preservedManualFieldsCount,
     existingRecordsKept: merge.keptExistingCount,
+    backupCreated: Boolean(merge.backupFile),
   }
 })
 
@@ -347,6 +415,9 @@ app.patch('/api/pos', async (request, reply) => {
   const uid = String(request.body?.uid ?? '')
   if (!uid) {
     return reply.code(400).send({ error: 'uid is required' })
+  }
+  if (isInvalidOptionalBoolean(request.body?.isJustified)) {
+    return reply.code(400).send({ error: 'isJustified must be boolean or null' })
   }
   const record = await posRepo.patch(request.body ?? {})
   if (!record) {
@@ -366,27 +437,30 @@ app.post('/api/imports/pos-excel', async (request, reply) => {
   const safeFilename = sanitizeFilename(file.filename || 'pos.xlsx')
   const storedFilename = `${new Date().toISOString().replace(/[:.]/g, '-')}-${safeFilename}`
 
-  const result = await posRepo.import(buffer, {
+  const importMeta = {
     importId,
     sourceFile: safeFilename,
     storedFilename,
-  })
+  }
+  const prepared = preparePosImport(buffer, importMeta)
 
-  if (result?.empty) {
-    const headers = Array.isArray(result.headers) ? result.headers : []
+  if (prepared.empty) {
+    const headers = Array.isArray(prepared.headers) ? prepared.headers : []
     const foundHeaders = headers.length ? headers.join(', ') : 'не найдены'
     return reply.code(400).send({
       error:
-        result.rowsCount > 0
+        prepared.rowsCount > 0
           ? `Файл не похож на выгрузку ПОС: не найдены строки с колонкой «Номер». Найденные заголовки: ${foundHeaders}`
           : 'Excel file does not contain recognized ПОС rows',
-      rowsCount: result.rowsCount ?? 0,
+      rowsCount: prepared.rowsCount ?? 0,
       headers,
     })
   }
 
   await fs.mkdir(uploadDir, { recursive: true })
   await fs.writeFile(path.join(uploadDir, storedFilename), buffer)
+
+  const result = await posRepo.importRecords(prepared.records, importMeta)
 
   return {
     importId,
@@ -399,6 +473,22 @@ app.post('/api/imports/pos-excel', async (request, reply) => {
     existingRecordsKept: result.keptExistingCount,
   }
 })
+
+let shuttingDown = false
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    if (shuttingDown) return
+    shuttingDown = true
+    app.log.info(`${signal} received — завершаем работу`)
+    // Дожидаемся незавершённой мутации стора (атомарная запись не должна
+    // прерываться), затем закрываем сервер.
+    storeMutationQueue
+      .catch(() => {})
+      .then(() => app.close())
+      .catch((error) => app.log.error(error))
+      .finally(() => process.exit(0))
+  })
+}
 
 await ensureStore()
 await migrateStoreFile()
@@ -433,10 +523,20 @@ async function ensureStore() {
 
 async function readStore() {
   if (storeCache) return storeCache
-  await ensureStore()
-  const raw = await fs.readFile(storeFile, 'utf8')
-  const parsed = JSON.parse(raw)
-  return setStoreCache(migrateAppealsStore(parsed))
+  // Защита от гонки холодного кэша: при пустом кэше параллельные запросы
+  // переиспользуют одно чтение/парс файла вместо того, чтобы парсить ~17 МБ дважды.
+  if (storeReadInFlight) return storeReadInFlight
+  storeReadInFlight = (async () => {
+    await ensureStore()
+    const raw = await fs.readFile(storeFile, 'utf8')
+    const parsed = JSON.parse(raw)
+    return setStoreCache(migrateAppealsStore(parsed))
+  })()
+  try {
+    return await storeReadInFlight
+  } finally {
+    storeReadInFlight = null
+  }
 }
 
 async function migrateStoreFile() {
@@ -472,6 +572,41 @@ async function writeStore(store, options = {}) {
   } catch (error) {
     await fs.rm(tempFile, { force: true })
     throw error
+  }
+}
+
+// Импорт обращений заменяет excel-записи: те, которых нет в новом файле, выбывают
+// вместе с ручными аннотациями. Перед каждым импортом снимаем снимок стора, чтобы
+// случайная загрузка частичного/чужого файла была обратимой.
+async function backupStoreFile() {
+  try {
+    await fs.access(storeFile)
+  } catch {
+    return null
+  }
+  await fs.mkdir(backupDir, { recursive: true })
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const target = path.join(backupDir, `complaints-store.${stamp}.json`)
+  await fs.copyFile(storeFile, target)
+  await pruneStoreBackups()
+  return target
+}
+
+async function pruneStoreBackups() {
+  if (!(maxStoreBackups > 0)) return
+  try {
+    const entries = (await fs.readdir(backupDir))
+      .filter(
+        (name) =>
+          name.startsWith('complaints-store.') && name.endsWith('.json'),
+      )
+      .sort() // ISO-таймстамп в имени сортируется хронологически
+    const excess = entries.slice(0, Math.max(0, entries.length - maxStoreBackups))
+    await Promise.all(
+      excess.map((name) => fs.rm(path.join(backupDir, name), { force: true })),
+    )
+  } catch {
+    // чистка бэкапов не критична — глотаем ошибку
   }
 }
 
@@ -566,6 +701,23 @@ function recordFailedLogin(clientKey, attempt) {
 function cleanQueryValue(value) {
   if (Array.isArray(value)) return String(value[0] ?? '').trim()
   return String(value ?? '').trim()
+}
+
+function isInvalidOptionalBoolean(value) {
+  return value !== undefined && value !== null && typeof value !== 'boolean'
+}
+
+function isInvalidInspection(value) {
+  if (value === undefined || value === null || !String(value).trim()) return false
+  return !['vnk', 'service'].includes(String(value).trim())
+}
+
+// Разбор числового query-параметра с дефолтом и зажимом в [min, max].
+// Раньше Number("abc") → NaN, и slice(offset, NaN) возвращал пустой ответ.
+function clampInteger(value, fallback, min, max) {
+  const parsed = Number(Array.isArray(value) ? value[0] : value)
+  const base = Number.isFinite(parsed) ? Math.trunc(parsed) : fallback
+  return Math.min(Math.max(base, min), max)
 }
 
 function createSessionToken(email) {

@@ -169,13 +169,16 @@ export async function fetchDashboard(mode: AppealMode): Promise<AppealsDashboard
 }
 
 export async function patchAppeal(body: AppealPatch): Promise<{ item: Appeal }> {
-  return asJson(
-    await fetch('/api/appeals', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
+  const raw = objectValue(
+    await asJson<unknown>(
+      await fetch('/api/appeals', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    ),
   )
+  return { item: normalizeAppeal(raw.item) }
 }
 
 export async function uploadExcel(file: File): Promise<ImportResult> {
@@ -397,7 +400,24 @@ export async function login(email: string, password: string): Promise<Session> {
     credentials: 'same-origin',
     body: JSON.stringify({ email, password }),
   })
-  if (!res.ok) throw new Error('Неверная почта или пароль')
+  if (!res.ok) {
+    let serverMessage = ''
+    try {
+      const body = objectValue(await res.json())
+      serverMessage = stringValue(body.error)
+    } catch {
+      // Infrastructure errors can return HTML or an empty body.
+    }
+    if (res.status === 401) throw new Error('Неверная почта или пароль')
+    if (res.status === 429) {
+      const retryAfter = Number(res.headers.get('Retry-After'))
+      const suffix = Number.isFinite(retryAfter)
+        ? ` Повторите через ${Math.ceil(retryAfter / 60)} мин.`
+        : ''
+      throw new Error(`Слишком много попыток входа.${suffix}`)
+    }
+    throw new Error(serverMessage || `Не удалось войти: ${res.status}`)
+  }
   return asJson(res)
 }
 

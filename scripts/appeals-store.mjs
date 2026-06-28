@@ -69,21 +69,16 @@ const COLUMN_ALIASES = {
   response: ['Ответ', 'Результат рассмотрения', 'Резолюция'],
 }
 
-const MANUAL_FIELD_KEYS = [
+const MANUAL_TEXT_FIELD_KEYS = [
   'department',
-  'departments',
   'category',
   'responsible',
   'affectedPersonOverride',
   'caseId',
-  'isJustified',
-  'justified',
-  'inspection',
   'notes',
   'issues',
-  'annotationCreatedAt',
-  'annotationUpdatedAt',
 ]
+const INSPECTION_VALUES = new Set(['vnk', 'service'])
 
 const DEPARTMENT_RULES = [
   ['инф. прием', 'Инфекционное приёмное отделение'],
@@ -644,8 +639,24 @@ export function getRecordKey(record) {
   // он не меняется между выгрузками, поэтому ручные аннотации (manualFields)
   // переносятся на ту же запись даже если в новой таблице чуть иная дата.
   const year = record.year || inferYear(record)
-  const id = clean(record.id || record.rkNumber || 'no-rk')
-  return `${year}:${id}`
+  return buildAppealKey({
+    year,
+    id: record.id || record.rkNumber,
+    rowNumber: record.rowNumber,
+    content: record.content,
+  })
+}
+
+function buildAppealKey({ year, id, rowNumber, content }) {
+  const safeYear = year || 'unknown'
+  const rkNumber = clean(id)
+  if (rkNumber) return `${safeYear}:${rkNumber}`
+
+  const row = Number(rowNumber)
+  if (Number.isFinite(row) && row > 0) return `${safeYear}:row-${row}`
+
+  const contentKey = fingerprint(content).slice(0, 80)
+  return `${safeYear}:content-${contentKey || 'no-rk'}`
 }
 
 function normalizeAppealRow(row, metadata) {
@@ -713,7 +724,12 @@ function normalizeAppealRow(row, metadata) {
   const rubricSource = tableRubric ? 'table' : 'classified'
   const rubricCanonicalName = resolvedRubric.name
   const rubricTheme = getRubricTheme(rubricCanonicalName)
-  const appealKey = `${year || 'unknown'}:${id || 'no-rk'}`
+  const appealKey = buildAppealKey({
+    year,
+    id,
+    rowNumber: metadata.rowNumber,
+    content,
+  })
   const detectedDocumentSource = resolveAppealDocumentSource({
     id,
     supportDocument,
@@ -930,7 +946,12 @@ function migrateRecord(record) {
   })
   // Формат ключа пересчитываем всегда (миграция со старого `год:№РК:дата`),
   // чтобы uid/appealKey были стабильны между выгрузками.
-  const appealKey = `${year || 'unknown'}:${record.id || record.rkNumber || 'no-rk'}`
+  const appealKey = buildAppealKey({
+    year,
+    id: record.id || record.rkNumber,
+    rowNumber: record.rowNumber,
+    content,
+  })
 
   return {
     ...record,
@@ -1622,11 +1643,40 @@ function clean(value) {
 
 export function pickManualFields(input = {}) {
   const manualFields = {}
-  for (const key of MANUAL_FIELD_KEYS) {
-    if (input[key] !== undefined) manualFields[key] = input[key]
+  if (
+    input.manualFields &&
+    typeof input.manualFields === 'object' &&
+    !Array.isArray(input.manualFields)
+  ) {
+    assignManualFields(manualFields, input.manualFields)
   }
-  if (input.manualFields && typeof input.manualFields === 'object') {
-    Object.assign(manualFields, input.manualFields)
-  }
+  assignManualFields(manualFields, input)
   return manualFields
+}
+
+function assignManualFields(target, input = {}) {
+  for (const key of MANUAL_TEXT_FIELD_KEYS) {
+    if (typeof input[key] === 'string' && clean(input[key])) {
+      target[key] = clean(input[key])
+    }
+  }
+
+  if (typeof input.isJustified === 'boolean') {
+    target.isJustified = input.isJustified
+  }
+  if (typeof input.justified === 'boolean') {
+    target.justified = input.justified
+  }
+
+  const inspection = clean(input.inspection)
+  if (INSPECTION_VALUES.has(inspection)) {
+    target.inspection = inspection
+  }
+
+  if (Array.isArray(input.departments)) {
+    const departments = [
+      ...new Set(input.departments.map(resolveDepartmentName).map(clean).filter(Boolean)),
+    ]
+    if (departments.length) target.departments = departments
+  }
 }

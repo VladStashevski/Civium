@@ -12,9 +12,9 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useAppeals } from '@/hooks/use-appeals'
+import { useReferences } from '@/hooks/use-appeals'
 import {
-  buildDepartmentDashboard,
+  buildDepartmentDashboardFromReferences,
   type DepartmentDashboard,
 } from '@/lib/department-dashboard'
 import type { AppealMode } from '@/lib/api'
@@ -81,13 +81,13 @@ export function DepartmentDistributionTabs({
 }
 
 export function DashboardDepartments({ mode }: { mode: AppealMode }) {
-  const { data, isPending } = useAppeals(mode)
+  const { data, isPending } = useReferences(mode)
   const dashboard = React.useMemo(
-    () => buildDepartmentDashboard(data?.items ?? []),
+    () => (data ? buildDepartmentDashboardFromReferences(data) : null),
     [data],
   )
 
-  if (isPending) {
+  if (isPending || !dashboard) {
     return (
       <div className="px-4 lg:px-6">
         <Card>

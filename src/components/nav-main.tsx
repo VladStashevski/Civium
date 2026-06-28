@@ -6,6 +6,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import type { AppealMode } from '@/lib/api'
 
@@ -36,7 +37,12 @@ export function NavMain({
   mode: AppealMode
 }) {
   const { pathname } = useLocation()
+  const { isMobile, setOpenMobile } = useSidebar()
   const activeUrl = items.find((item) => isNavItemActive(item, pathname))?.url
+  // На мобильном сайдбар — overlay; после выбора пункта закрываем его.
+  const closeOnMobile = () => {
+    if (isMobile) setOpenMobile(false)
+  }
 
   return (
     <SidebarGroup>
@@ -59,6 +65,7 @@ export function NavMain({
                     activeOptions={{ exact: item.url === '/' }}
                     activeProps={{ 'data-active': 'true' }}
                     style={{ fontWeight: isActive ? 600 : 440 }}
+                    onClick={closeOnMobile}
                   >
                     {item.icon}
                     <span>{item.title}</span>

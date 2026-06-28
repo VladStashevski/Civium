@@ -49,74 +49,34 @@ function formatAnnotationDate(value: unknown) {
   }).format(date)
 }
 
-// Смена цифры = направленный «прокат»: новое число въезжает снизу при росте и
-// сверху при убыли (slide + лёгкий fade), пружинным таймингом. По-прежнему в
-// кадре ОДНА цифра — никакого наложения/ghosting (он раньше давал «мигание»):
-// предыдущая не держится, въезд новой и есть переход. Сам бейдж overflow-hidden,
-// так что цифра выкатывается изнутри кружка. На первом появлении бейджа
-// направления нет — цифра статична, за появление отвечает обёртка CountBadge.
+// Смена цифры анимируется ремоунтом по key: в кадре остается одно число, без
+// синхронизации локального состояния из props и без наложения старого значения.
 function RollingDigits({ value }: { value: number }) {
-  const [current, setCurrent] = React.useState(value)
-  const [dir, setDir] = React.useState<'up' | 'down' | null>(null)
-  if (current !== value) {
-    setDir(value > current ? 'up' : 'down')
-    setCurrent(value)
-  }
-  React.useEffect(() => {
-    if (!dir) return
-    const timer = window.setTimeout(() => setDir(null), 220)
-    return () => window.clearTimeout(timer)
-  }, [dir, current])
-
   return (
     <span
-      key={current}
-      className={cn(
-        'inline-block tabular-nums [animation-timing-function:cubic-bezier(0.34,1.3,0.7,1)]',
-        dir === 'up' && 'duration-200 animate-in fade-in-0 slide-in-from-bottom-1',
-        dir === 'down' && 'duration-200 animate-in fade-in-0 slide-in-from-top-1',
-      )}
+      key={value}
+      className="inline-block animate-in fade-in-0 slide-in-from-bottom-1 duration-200 tabular-nums [animation-timing-function:cubic-bezier(0.34,1.3,0.7,1)]"
     >
-      {current}
+      {value}
     </span>
   )
 }
 
 function CountBadge({ count }: { count: number }) {
-  const [prevCount, setPrevCount] = React.useState(count)
-  // во время схлопывания держим последнее положительное число (не показываем 0)
-  const [display, setDisplay] = React.useState(count)
-  if (prevCount !== count) {
-    setPrevCount(count)
-    if (count > 0) setDisplay(count)
-  }
-
   const visible = count > 0
-
-  // Меряем фактическую ширину бейджа СИНХРОННО при смене числа (useLayoutEffect
-  // в том же кадре) — без лага ResizeObserver, иначе ширина (и сдвиг лейбла)
-  // доезжает на кадр позже цифры и в конце «доскакивает». tabular-nums держит
-  // одинаковую ширину цифр, так что ширина меняется только при 1↔2 знаках.
-  const badgeRef = React.useRef<HTMLSpanElement>(null)
-  const [width, setWidth] = React.useState<number>()
-  React.useLayoutEffect(() => {
-    if (badgeRef.current) setWidth(badgeRef.current.offsetWidth)
-  }, [display])
 
   return (
     <span
       aria-hidden={!visible}
-      style={{ width: visible ? width : 0 }}
       className={cn(
-        'inline-flex overflow-hidden transition-[width,margin-left,opacity] duration-200 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]',
-        visible ? 'ml-1 opacity-100' : 'ml-0 opacity-0',
+        'inline-flex overflow-hidden transition-[max-width,margin-left,opacity] duration-200 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]',
+        visible ? 'ml-1 max-w-10 opacity-100' : 'ml-0 max-w-0 opacity-0',
       )}
     >
       <span
-        ref={badgeRef}
         className="flex h-3.5 min-w-3.5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary px-1 text-[0.625rem] font-semibold text-primary-foreground tabular-nums"
       >
-        <RollingDigits key={visible ? 'on' : 'off'} value={display} />
+        <RollingDigits value={count} />
       </span>
     </span>
   )

@@ -7,6 +7,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { readPosExcelRows, normalizePosRecords } from './pos-parser.mjs'
 import { syncPosAnnotationTimestamps } from './pos-annotations.mjs'
+import { resolveDepartmentName } from './departments.mjs'
 
 export const POS_STORE_SCHEMA = 'pos.v1'
 
@@ -34,19 +35,21 @@ export function migratePosStore(store = {}) {
 /** Оставляет только разрешённые ручные поля из тела запроса. */
 export function pickPosManualFields(input = {}) {
   const manualFields = {}
-  if (input.isJustified !== undefined && input.isJustified !== null) {
-    manualFields.isJustified = Boolean(input.isJustified)
+  if (typeof input.isJustified === 'boolean') {
+    manualFields.isJustified = input.isJustified
   }
   if (typeof input.notes === 'string' && input.notes.trim()) {
-    manualFields.notes = input.notes
+    manualFields.notes = input.notes.trim()
   }
   if (typeof input.issues === 'string' && input.issues.trim()) {
-    manualFields.issues = input.issues
+    manualFields.issues = input.issues.trim()
   }
   if (Array.isArray(input.departments)) {
-    const departments = input.departments
-      .map((item) => String(item).trim())
-      .filter(Boolean)
+    const departments = [
+      ...new Set(
+        input.departments.map(resolveDepartmentName).map((item) => item.trim()).filter(Boolean),
+      ),
+    ]
     if (departments.length) manualFields.departments = departments
   }
   return manualFields
@@ -110,7 +113,8 @@ export function mergePosRecords(store, records, meta = {}) {
   const keptExistingRecords = currentStore.records.filter(
     (record) => !importedKeys.has(record.uid),
   )
-  const removedCount = keptExistingRecords.length
+  // Импорт ПОС additive: записи прошлых выгрузок сохраняются, ничего не удаляется.
+  const removedCount = 0
 
   const nextStore = {
     ...currentStore,
@@ -143,6 +147,24 @@ export function mergePosRecords(store, records, meta = {}) {
     duplicateCount,
     preservedManualFieldsCount,
     keptExistingCount: keptExistingRecords.length,
+  }
+}
+
+export function preparePosImport(buffer, meta = {}) {
+  const rows = readPosExcelRows(buffer)
+  const records = normalizePosRecords(rows, meta)
+  if (!records.length) {
+    return {
+      empty: true,
+      rowsCount: rows.length,
+      headers: Object.keys(rows[0] ?? {}).slice(0, 20),
+      records: [],
+    }
+  }
+  return {
+    empty: false,
+    rows,
+    records,
   }
 }
 
@@ -239,6 +261,20 @@ export function createPosRepository({ dataDir, seedFile } = {}) {
     return operation
   }
 
+  function importRecords(records, meta = {}) {
+    if (!Array.isArray(records) || !records.length) {
+      return {
+        empty: true,
+        rowsCount: 0,
+        headers: [],
+      }
+    }
+    return mutate((store) => {
+      const result = mergePosRecords(store, records, meta)
+      return { nextStore: result.store, result }
+    })
+  }
+
   return {
     ensure,
     async list() {
@@ -263,8 +299,8 @@ export function createPosRepository({ dataDir, seedFile } = {}) {
         if (body.isJustified === null) {
           delete current.manualFields?.isJustified
           delete manualFields.isJustified
-        } else if (body.isJustified !== undefined) {
-          manualFields.isJustified = Boolean(body.isJustified)
+        } else if (typeof body.isJustified === 'boolean') {
+          manualFields.isJustified = body.isJustified
         }
         if (body.notes !== undefined && !String(body.notes).trim()) {
           delete current.manualFields?.notes
@@ -276,7 +312,14 @@ export function createPosRepository({ dataDir, seedFile } = {}) {
         }
         if (body.departments !== undefined) {
           const departments = Array.isArray(body.departments)
-            ? body.departments.map((item) => String(item).trim()).filter(Boolean)
+            ? [
+                ...new Set(
+                  body.departments
+                    .map(resolveDepartmentName)
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                ),
+              ]
             : []
           if (departments.length) {
             manualFields.departments = departments
@@ -293,19 +336,10 @@ export function createPosRepository({ dataDir, seedFile } = {}) {
       })
     },
     async import(buffer, meta = {}) {
-      const rows = readPosExcelRows(buffer)
-      const records = normalizePosRecords(rows, meta)
-      if (!records.length) {
-        return {
-          empty: true,
-          rowsCount: rows.length,
-          headers: Object.keys(rows[0] ?? {}).slice(0, 20),
-        }
-      }
-      return mutate((store) => {
-        const result = mergePosRecords(store, records, meta)
-        return { nextStore: result.store, result }
-      })
+      const prepared = preparePosImport(buffer, meta)
+      if (prepared.empty) return prepared
+      return importRecords(prepared.records, meta)
     },
+    importRecords,
   }
 }
