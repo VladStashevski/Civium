@@ -6,8 +6,6 @@ import {
   type VisibilityState,
   flexRender,
   getCoreRowModel,
-  getFacetedRowModel,
-  getFacetedUniqueValues,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
@@ -23,6 +21,7 @@ import {
   COLUMN_LABELS,
   COLUMN_MIN_WIDTHS,
   DEFAULT_HIDDEN,
+  JUSTIFIED_OPTIONS,
   columns,
   remWidth,
   uniqueOptions,
@@ -56,16 +55,36 @@ function uniqueFlatOptions(
   rows: Appeal[],
   getValues: (appeal: Appeal) => string[],
 ) {
-  const values = new Set<string>()
+  const counts = new Map<string, number>()
   for (const row of rows) {
+    const rowValues = new Set<string>()
     for (const value of getValues(row)) {
       const clean = value.trim()
-      if (clean) values.add(clean)
+      if (clean) rowValues.add(clean)
+    }
+    for (const value of rowValues) {
+      counts.set(value, (counts.get(value) ?? 0) + 1)
     }
   }
-  return [...values]
-    .sort((a, b) => a.localeCompare(b, 'ru'))
-    .map((value) => ({ label: value, value }))
+  return [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'ru'))
+    .map(([value, count]) => ({ label: value, value, count }))
+}
+
+function countStaticOptions(
+  rows: Appeal[],
+  options: typeof JUSTIFIED_OPTIONS,
+  getValue: (appeal: Appeal) => string,
+) {
+  const counts = new Map(options.map((option) => [option.value, 0]))
+  for (const row of rows) {
+    const value = getValue(row)
+    counts.set(value, (counts.get(value) ?? 0) + 1)
+  }
+  return options.map((option) => ({
+    ...option,
+    count: counts.get(option.value) ?? 0,
+  }))
 }
 
 export function AppealsTable({ mode }: { mode: AppealMode }) {
@@ -148,6 +167,17 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
       ),
     [rows],
   )
+  const justifiedOptions = React.useMemo(
+    () =>
+      countStaticOptions(rows, JUSTIFIED_OPTIONS, (appeal) =>
+        appeal.manualFields?.isJustified === true
+          ? 'Обоснованно'
+          : appeal.manualFields?.isJustified === false
+            ? 'Не обоснованно'
+            : '',
+      ),
+    [rows],
+  )
 
   const table = useReactTable({
     data: rows,
@@ -189,8 +219,6 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
   })
 
   const total = table.getFilteredRowModel().rows.length
@@ -242,6 +270,7 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
             themeOptions={themeOptions}
             departmentProfileOptions={departmentProfileOptions}
             departmentOptions={departmentOptions}
+            justifiedOptions={justifiedOptions}
             onColumnVisibleChange={setColumnVisible}
           />
 

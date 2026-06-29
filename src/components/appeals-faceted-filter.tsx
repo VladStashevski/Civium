@@ -11,7 +11,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 
-export type FacetOption = { label: string; value: string }
+export type FacetOption = { label: string; value: string; count?: number }
 
 export function FacetedFilter<T>({
   column,
@@ -22,8 +22,9 @@ export function FacetedFilter<T>({
   title: string
   options: FacetOption[]
 }) {
-  const facets = column?.getFacetedUniqueValues()
   const selected = new Set((column?.getFilterValue() as string[]) ?? [])
+  const needsFallbackCounts = options.some((option) => option.count === undefined)
+  const facets = needsFallbackCounts ? column?.getFacetedUniqueValues() : undefined
 
   return (
     <Popover>
@@ -76,7 +77,7 @@ export function FacetedFilter<T>({
         <div className="max-h-80 overflow-y-auto py-2">
           {options.map((option) => {
             const isSelected = selected.has(option.value)
-            const count = facets?.get(option.value)
+            const count = option.count ?? facets?.get(option.value)
             return (
               <button
                 key={option.value}

@@ -5,7 +5,6 @@ import { DateRangeFilter } from '@/components/appeals-date-range-filter'
 import { FacetedFilter, type FacetOption } from '@/components/appeals-faceted-filter'
 import {
   COLUMN_LABELS,
-  JUSTIFIED_OPTIONS,
 } from '@/components/appeals-table-columns'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,6 +28,7 @@ export function AppealsToolbar({
   themeOptions,
   departmentProfileOptions,
   departmentOptions,
+  justifiedOptions,
   onColumnVisibleChange,
 }: {
   table: Table<Appeal>
@@ -40,6 +40,7 @@ export function AppealsToolbar({
   themeOptions: FacetOption[]
   departmentProfileOptions: FacetOption[]
   departmentOptions: FacetOption[]
+  justifiedOptions: FacetOption[]
   onColumnVisibleChange: (column: Column<Appeal>, visible: boolean) => void
 }) {
   const globalFilter = String(table.getState().globalFilter ?? '')
@@ -94,7 +95,7 @@ export function AppealsToolbar({
       <FacetedFilter
         column={table.getColumn('justified')}
         title="Обоснованность"
-        options={JUSTIFIED_OPTIONS}
+        options={justifiedOptions}
       />
       {isFiltered && (
         <Button
