@@ -295,13 +295,11 @@ export function mergeExcelRowsIntoStore(store, rows, importMeta) {
     }
   })
 
-  const manualRecords = currentStore.records.filter(
-    (record) => record.origin !== 'excel'
+  const keptExistingRecords = currentStore.records.filter(
+    (record) => record.origin !== 'excel' || !importedKeys.has(getRecordKey(record))
   )
-  const removedCount = currentStore.records.filter(
-    (record) =>
-      record.origin === 'excel' && !importedKeys.has(getRecordKey(record))
-  ).length
+  // Excel uploads are additive: rows missing from the latest file stay in the store.
+  const removedCount = 0
 
   const nextStore = {
     ...currentStore,
@@ -322,7 +320,7 @@ export function mergeExcelRowsIntoStore(store, rows, importMeta) {
         preservedManualFieldsCount,
       },
     ],
-    records: [...mergedImported, ...manualRecords].sort(compareAppeals),
+    records: [...mergedImported, ...keptExistingRecords].sort(compareAppeals),
   }
   nextStore.references = buildReferenceData(nextStore.records)
 
@@ -335,7 +333,7 @@ export function mergeExcelRowsIntoStore(store, rows, importMeta) {
     removedCount,
     duplicateCount,
     preservedManualFieldsCount,
-    keptExistingCount: manualRecords.length,
+    keptExistingCount: keptExistingRecords.length,
   }
 }
 

@@ -372,7 +372,7 @@ test('store separates registration route, source organization and channel', () =
   assert.equal(externalSources.includes('Иные органы власти ХМАО-Югры'), false)
 })
 
-test('reimport replaces the Excel snapshot and preserves manual data', () => {
+test('reimport enriches the Excel dataset and preserves manual data', () => {
   const firstImport = mergeExcelRowsIntoStore(
     { records: [], imports: [] },
     [
@@ -418,12 +418,12 @@ test('reimport replaces the Excel snapshot and preserves manual data', () => {
 
   assert.equal(secondImport.addedCount, 1)
   assert.equal(secondImport.updatedCount, 1)
-  assert.equal(secondImport.removedCount, 1)
-  assert.equal(secondImport.keptExistingCount, 1)
+  assert.equal(secondImport.removedCount, 0)
+  assert.equal(secondImport.keptExistingCount, 2)
   assert.equal(secondImport.preservedManualFieldsCount, 1)
   assert.deepEqual(
     secondImport.store.records.map((record) => record.id).sort(),
-    ['07/19-ОГ-1', '07/19-ОГ-3', 'MANUAL-1']
+    ['07/19-ОГ-1', '07/19-ОГ-2', '07/19-ОГ-3', 'MANUAL-1']
   )
 
   const updated = secondImport.store.records.find(
@@ -442,12 +442,18 @@ test('reimport replaces the Excel snapshot and preserves manual data', () => {
   assert.equal(updated.manualFields.annotationUpdatedAt, '2026-06-17T09:00:00.000Z')
   assert.equal(updated.importHistory.length, 2)
 
+  const kept = secondImport.store.records.find(
+    (record) => record.id === '07/19-ОГ-2'
+  )
+  assert.equal(kept.content, 'Устаревшая запись')
+
   const dashboard = buildDashboardData(secondImport.store.records)
   assert.deepEqual(
     dashboard.byChiefDoctorChannel.map(({ name, count }) => ({ name, count })),
     [
       { name: 'E-mail', count: 1 },
       { name: 'Курьер', count: 1 },
+      { name: 'Почта', count: 1 },
     ]
   )
 })

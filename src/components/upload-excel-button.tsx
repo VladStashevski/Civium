@@ -24,7 +24,7 @@ export function UploadExcelButton() {
           mutate(file, {
             onSuccess: (r) =>
               toast.success(
-                `Импорт готов: +${r.addedCount} новых, ${r.updatedCount} обновлено, ${r.removedCount} устаревших удалено, аннотаций сохранено ${r.manualFieldsPreserved}`,
+                `Импорт готов: +${r.addedCount} новых, ${r.updatedCount} обновлено, ${r.existingRecordsKept} старых сохранено, аннотаций сохранено ${r.manualFieldsPreserved}`,
                 { id },
               ),
             onError: (error) =>
