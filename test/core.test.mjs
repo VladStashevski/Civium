@@ -130,6 +130,31 @@ test('dashboard counts discontinued appeals separately', () => {
   assert.equal(dashboard.comparison.previousSummary.justificationMissingCount, 2)
 })
 
+test('dashboard counts appeals without departments separately', () => {
+  const records = [
+    {
+      ...makeRecord('2025-1'),
+      dateIso: '2025-06-08',
+      year: 2025,
+      departments: ['Неврологическое отделение'],
+    },
+    { ...makeRecord('2025-2'), dateIso: '2025-06-09', year: 2025 },
+    {
+      ...makeRecord('2026-1'),
+      dateIso: '2026-06-08',
+      year: 2026,
+      manualFields: { departments: ['Неврология'] },
+    },
+    { ...makeRecord('2026-2'), dateIso: '2026-06-09', year: 2026, departments: [''] },
+  ]
+
+  const dashboard = buildDashboardData(records)
+
+  assert.equal(dashboard.summary.departmentMissingCount, 1)
+  assert.equal(dashboard.comparison.currentSummary.departmentMissingCount, 1)
+  assert.equal(dashboard.comparison.previousSummary.departmentMissingCount, 1)
+})
+
 test('dashboard compares current and previous years through the same date', () => {
   const records = [
     { ...makeRecord('2025-1'), dateIso: '2025-06-08', year: 2025 },

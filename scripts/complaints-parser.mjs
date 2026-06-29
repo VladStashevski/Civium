@@ -5,6 +5,7 @@ import {
   OFFICIAL_RUBRICS,
   RUBRIC_ALIASES,
 } from './appeals-classifier.mjs'
+import { resolveDepartmentName } from './departments.mjs'
 
 const OFFICIAL_RUBRIC_NAMES = new Set(
   OFFICIAL_RUBRICS.map((rubric) => rubric.name)
@@ -128,6 +129,7 @@ export function buildDashboardData(records, metadata = {}) {
     (record) => record.manualFields?.isJustified === false
   ).length
   const justificationMissingCount = total - justifiedCount - unjustifiedCount
+  const departmentMissingCount = normalizedRecords.filter(hasNoDepartments).length
   const discontinuedCount = normalizedRecords.filter(isDiscontinuedRecord).length
   const previousSummary = buildSummary(previousRecords, {
     gratitudeCount: previousGratitudeCount,
@@ -158,6 +160,7 @@ export function buildDashboardData(records, metadata = {}) {
       justifiedCount,
       unjustifiedCount,
       justificationMissingCount,
+      departmentMissingCount,
       discontinuedCount,
       manualCount: normalizedRecords.filter((record) => record.origin === 'manual')
         .length,
@@ -276,9 +279,30 @@ function buildSummary(records, extra = {}) {
     justifiedCount,
     unjustifiedCount,
     justificationMissingCount: records.length - justifiedCount - unjustifiedCount,
+    departmentMissingCount: records.filter(hasNoDepartments).length,
     gratitudeCount: extra.gratitudeCount ?? records.filter(isGratitudeRecord).length,
     discontinuedCount: records.filter(isDiscontinuedRecord).length,
   }
+}
+
+function recordDepartments(record = {}) {
+  const manual = Array.isArray(record.manualFields?.departments)
+    ? record.manualFields.departments
+    : []
+  const source = manual.length
+    ? manual
+    : Array.isArray(record.departments)
+      ? record.departments
+      : []
+  return [
+    ...new Set(
+      source.map(resolveDepartmentName).map((item) => clean(item)).filter(Boolean)
+    ),
+  ]
+}
+
+function hasNoDepartments(record = {}) {
+  return recordDepartments(record).length === 0
 }
 
 export function isGratitudeRecord(record = {}) {

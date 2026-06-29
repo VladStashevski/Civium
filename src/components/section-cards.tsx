@@ -1,6 +1,6 @@
 import {
+  IconBuildingHospital,
   IconCircleCheck,
-  IconCircleX,
   IconClipboardCheck,
   IconFileX,
   IconHeartHandshake,
@@ -66,9 +66,6 @@ export function SectionCards({ mode }: { mode: AppealMode }) {
 
   const dashboard = normalizeDashboard(data)
   const { total, summary, comparison } = dashboard
-  const missingShare = total
-    ? (summary.justificationMissingCount / total) * 100
-    : 0
   const shareText = (count: number) =>
     total ? `${((count / total) * 100).toFixed(1).replace('.', ',')}%` : '0,0%'
   const metric = (current: number, previous: number) => ({
@@ -106,27 +103,25 @@ export function SectionCards({ mode }: { mode: AppealMode }) {
       footMeta: `${shareText(summary.justifiedCount)} от обращений`,
     },
     {
-      description: 'Необоснованные',
-      ...metric(summary.unjustifiedCount, comparison.previousSummary.unjustifiedCount),
-      icon: IconCircleX,
-      value: summary.unjustifiedCount.toLocaleString('ru-RU'),
-      tone: 'badIncrease',
-      footTitle: `${comparison.previousYear}: ${comparison.previousSummary.unjustifiedCount.toLocaleString('ru-RU')} · ${comparison.currentYear}: ${summary.unjustifiedCount.toLocaleString('ru-RU')}`,
-      footMeta: `${shareText(summary.unjustifiedCount)} от обращений`,
-    },
-    {
-      description: 'Без оценки',
+      description: 'Не задано',
       ...metric(
         summary.justificationMissingCount,
         comparison.previousSummary.justificationMissingCount,
       ),
-      deltaPercent: missingShare,
       icon: IconClipboardCheck,
       value: summary.justificationMissingCount.toLocaleString('ru-RU'),
-      badgeText: `${missingShare.toFixed(1).replace('.', ',')}%`,
       tone: 'badIncrease',
-      footTitle: 'Требуют ручной аннотации',
-      footMeta: `Оценено: ${(summary.justifiedCount + summary.unjustifiedCount).toLocaleString('ru-RU')} · ${missingShare.toFixed(1).replace('.', ',')}% без оценки`,
+      footTitle: `${comparison.previousYear}: ${comparison.previousSummary.justificationMissingCount.toLocaleString('ru-RU')} · ${comparison.currentYear}: ${summary.justificationMissingCount.toLocaleString('ru-RU')}`,
+      footMeta: `${shareText(summary.justificationMissingCount)} от обращений`,
+    },
+    {
+      description: 'Без отделения',
+      ...metric(summary.departmentMissingCount, comparison.previousSummary.departmentMissingCount),
+      icon: IconBuildingHospital,
+      value: summary.departmentMissingCount.toLocaleString('ru-RU'),
+      tone: 'badIncrease',
+      footTitle: `${comparison.previousYear}: ${comparison.previousSummary.departmentMissingCount.toLocaleString('ru-RU')} · ${comparison.currentYear}: ${summary.departmentMissingCount.toLocaleString('ru-RU')}`,
+      footMeta: `${shareText(summary.departmentMissingCount)} от обращений`,
     },
     {
       description: 'Благодарности',
