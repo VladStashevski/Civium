@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import {
   fetchAppeals,
   fetchDashboard,
@@ -35,31 +40,40 @@ export function useLogin() {
 export function useDashboard(mode: AppealMode) {
   return useQuery({
     queryKey: ['dashboard', mode],
-    queryFn: () => fetchDashboard(mode),
+    queryFn: ({ signal }) => fetchDashboard(mode, signal),
   })
 }
 
 export function useAppeals(mode: AppealMode) {
   return useQuery({
     queryKey: ['appeals', mode],
-    queryFn: () => fetchAppeals(mode),
+    queryFn: ({ signal }) => fetchAppeals(mode, signal),
   })
 }
 
 export function useReferences(mode: AppealMode) {
   return useQuery({
     queryKey: ['references', mode],
-    queryFn: () => fetchReferences(mode),
+    queryFn: ({ signal }) => fetchReferences(mode, signal),
   })
 }
 
-function useInvalidateAppeals() {
-  const qc = useQueryClient()
-  return () => {
-    qc.invalidateQueries({ queryKey: ['appeals'] })
-    qc.invalidateQueries({ queryKey: ['dashboard'] })
-    qc.invalidateQueries({ queryKey: ['references'] })
-  }
+async function refreshAppealQueriesAfterImport(qc: QueryClient) {
+  await Promise.all([
+    qc.cancelQueries({ queryKey: ['appeals'] }),
+    qc.cancelQueries({ queryKey: ['dashboard'] }),
+    qc.cancelQueries({ queryKey: ['references'] }),
+  ])
+
+  qc.removeQueries({ queryKey: ['appeals'], type: 'inactive' })
+  qc.removeQueries({ queryKey: ['dashboard'], type: 'inactive' })
+  qc.removeQueries({ queryKey: ['references'], type: 'inactive' })
+
+  await Promise.all([
+    qc.invalidateQueries({ queryKey: ['appeals'], refetchType: 'active' }),
+    qc.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'active' }),
+    qc.invalidateQueries({ queryKey: ['references'], refetchType: 'active' }),
+  ])
 }
 
 export function usePatchAppeal() {
@@ -160,9 +174,9 @@ function applyManualPatch(appeal: Appeal, patch: AppealPatch): Appeal {
 }
 
 export function useUploadExcel() {
-  const invalidate = useInvalidateAppeals()
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: (file: File) => uploadExcel(file),
-    onSuccess: invalidate,
+    onSuccess: () => refreshAppealQueriesAfterImport(qc),
   })
 }

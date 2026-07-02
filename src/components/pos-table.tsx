@@ -6,8 +6,6 @@ import {
   type VisibilityState,
   flexRender,
   getCoreRowModel,
-  getFacetedRowModel,
-  getFacetedUniqueValues,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
@@ -23,6 +21,8 @@ import {
   COLUMN_LABELS,
   COLUMN_MIN_WIDTHS,
   DEFAULT_HIDDEN,
+  JUSTIFIED_OPTIONS,
+  RATING_OPTIONS,
   columns,
   remWidth,
   uniqueOptions,
@@ -50,6 +50,22 @@ import { usePersistentState } from '@/hooks/use-persistent-state'
 import { useWindowVirtualRows } from '@/hooks/use-window-virtual-rows'
 import type { PosMessage } from '@/lib/api'
 import { cn } from '@/lib/utils'
+
+function countStaticOptions(
+  rows: PosMessage[],
+  options: typeof RATING_OPTIONS,
+  getValue: (message: PosMessage) => string,
+) {
+  const counts = new Map(options.map((option) => [option.value, 0]))
+  for (const row of rows) {
+    const value = getValue(row)
+    counts.set(value, (counts.get(value) ?? 0) + 1)
+  }
+  return options.map((option) => ({
+    ...option,
+    count: counts.get(option.value) ?? 0,
+  }))
+}
 
 export function PosTable() {
   const { data, isPending } = usePos()
@@ -95,6 +111,24 @@ export function PosTable() {
     () => uniqueOptions(rows, (m) => m.status),
     [rows],
   )
+  const ratingOptions = React.useMemo(
+    () =>
+      countStaticOptions(rows, RATING_OPTIONS, (m) =>
+        m.rating === null ? '' : String(m.rating),
+      ),
+    [rows],
+  )
+  const justifiedOptions = React.useMemo(
+    () =>
+      countStaticOptions(rows, JUSTIFIED_OPTIONS, (m) =>
+        m.manualFields?.isJustified === true
+          ? 'Обоснованно'
+          : m.manualFields?.isJustified === false
+            ? 'Не обоснованно'
+            : '',
+      ),
+    [rows],
+  )
 
   const table = useReactTable({
     data: rows,
@@ -136,8 +170,6 @@ export function PosTable() {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
   })
 
   const total = table.getFilteredRowModel().rows.length
@@ -180,6 +212,8 @@ export function PosTable() {
             categoryOptions={categoryOptions}
             subcategoryOptions={subcategoryOptions}
             statusOptions={statusOptions}
+            ratingOptions={ratingOptions}
+            justifiedOptions={justifiedOptions}
             onColumnVisibleChange={setColumnVisible}
           />
 

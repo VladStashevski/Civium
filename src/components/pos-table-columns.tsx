@@ -411,12 +411,12 @@ export function uniqueOptions(
   items: PosMessage[],
   getValue: (item: PosMessage) => string,
 ): FacetOption[] {
-  const set = new Set<string>()
+  const counts = new Map<string, number>()
   for (const item of items) {
     const value = getValue(item)
-    if (value) set.add(value)
+    if (value) counts.set(value, (counts.get(value) ?? 0) + 1)
   }
-  return [...set]
-    .sort((a, b) => a.localeCompare(b, 'ru'))
-    .map((v) => ({ label: v, value: v }))
+  return [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'ru'))
+    .map(([value, count]) => ({ label: value, value, count }))
 }

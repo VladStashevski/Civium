@@ -100,15 +100,28 @@ function stringArray(value: unknown): string[] {
     : []
 }
 
+function isAppealMode(value: unknown): value is AppealMode {
+  return value === 'chiefDoctor' || value === 'external'
+}
+
+function isChiefDoctorRegistration(id: string, registrationRoute: string) {
+  return (
+    /^07(?:\/19|-19)(?!\d)/i.test(id.trim()) ||
+    registrationRoute.includes('07/19')
+  )
+}
+
 function normalizeAppeal(value: unknown): Appeal {
   const item = objectValue(value)
   const manualFields = objectValue(item.manualFields)
   const id = stringValue(item.id)
-  const appealMode: AppealMode =
-    item.appealMode === 'external' ||
-    (!String(id).includes('07/19') && item.isChiefDoctor !== true)
-      ? 'external'
-      : 'chiefDoctor'
+  const registrationRoute = stringValue(item.registrationRoute)
+  const appealMode: AppealMode = isAppealMode(item.appealMode)
+    ? item.appealMode
+    : item.isChiefDoctor === true ||
+        isChiefDoctorRegistration(id, registrationRoute)
+      ? 'chiefDoctor'
+      : 'external'
 
   return {
     ...(item as Partial<Appeal>),
@@ -131,7 +144,7 @@ function normalizeAppeal(value: unknown): Appeal {
     sourceChannel:
       stringValue(item.sourceChannel) || stringValue(item.delivery),
     appealMode,
-    registrationRoute: stringValue(item.registrationRoute),
+    registrationRoute,
     documentTopic: stringValue(item.documentTopic),
     officialCategory: stringValue(item.officialCategory),
     isChiefDoctor: appealMode === 'chiefDoctor',
@@ -145,10 +158,13 @@ function normalizeAppeal(value: unknown): Appeal {
   }
 }
 
-export async function fetchAppeals(mode: AppealMode): Promise<AppealsResponse> {
+export async function fetchAppeals(
+  mode: AppealMode,
+  signal?: AbortSignal,
+): Promise<AppealsResponse> {
   const raw = objectValue(
     await asJson<unknown>(
-      await fetch(`/api/appeals?limit=100000&mode=${mode}`),
+      await fetch(`/api/appeals?limit=100000&mode=${mode}`, { signal }),
     ),
   )
   const items = (Array.isArray(raw.items) ? raw.items : [])
@@ -162,9 +178,12 @@ export async function fetchAppeals(mode: AppealMode): Promise<AppealsResponse> {
   }
 }
 
-export async function fetchDashboard(mode: AppealMode): Promise<AppealsDashboard> {
+export async function fetchDashboard(
+  mode: AppealMode,
+  signal?: AbortSignal,
+): Promise<AppealsDashboard> {
   return normalizeDashboard(
-    await asJson<unknown>(await fetch(`/api/dashboard?mode=${mode}`)),
+    await asJson<unknown>(await fetch(`/api/dashboard?mode=${mode}`, { signal })),
   )
 }
 
@@ -291,8 +310,8 @@ function normalizePosMessage(value: unknown): PosMessage {
   }
 }
 
-export async function fetchPos(): Promise<PosResponse> {
-  const raw = objectValue(await asJson<unknown>(await fetch('/api/pos')))
+export async function fetchPos(signal?: AbortSignal): Promise<PosResponse> {
+  const raw = objectValue(await asJson<unknown>(await fetch('/api/pos', { signal })))
   const items = (Array.isArray(raw.items) ? raw.items : []).map(
     normalizePosMessage,
   )
@@ -365,9 +384,12 @@ function normalizeRefItems<T extends RefItem>(
   })
 }
 
-export async function fetchReferences(mode: AppealMode): Promise<References> {
+export async function fetchReferences(
+  mode: AppealMode,
+  signal?: AbortSignal,
+): Promise<References> {
   const raw = objectValue(
-    await asJson<unknown>(await fetch(`/api/references?mode=${mode}`)),
+    await asJson<unknown>(await fetch(`/api/references?mode=${mode}`, { signal })),
   )
   return {
     generatedAt: stringValue(raw.generatedAt),

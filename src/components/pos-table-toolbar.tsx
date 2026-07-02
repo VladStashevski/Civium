@@ -2,11 +2,7 @@ import type { Column, Table } from '@tanstack/react-table'
 import { SlidersHorizontalIcon, XIcon } from '@phosphor-icons/react'
 
 import { FacetedFilter, type FacetOption } from '@/components/appeals-faceted-filter'
-import {
-  COLUMN_LABELS,
-  JUSTIFIED_OPTIONS,
-  RATING_OPTIONS,
-} from '@/components/pos-table-columns'
+import { COLUMN_LABELS } from '@/components/pos-table-columns'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -26,6 +22,8 @@ export function PosToolbar({
   categoryOptions,
   subcategoryOptions,
   statusOptions,
+  ratingOptions,
+  justifiedOptions,
   onColumnVisibleChange,
 }: {
   table: Table<PosMessage>
@@ -34,6 +32,8 @@ export function PosToolbar({
   categoryOptions: FacetOption[]
   subcategoryOptions: FacetOption[]
   statusOptions: FacetOption[]
+  ratingOptions: FacetOption[]
+  justifiedOptions: FacetOption[]
   onColumnVisibleChange: (column: Column<PosMessage>, visible: boolean) => void
 }) {
   const globalFilter = String(table.getState().globalFilter ?? '')
@@ -75,12 +75,12 @@ export function PosToolbar({
       <FacetedFilter
         column={table.getColumn('rating')}
         title="Оценка"
-        options={RATING_OPTIONS}
+        options={ratingOptions}
       />
       <FacetedFilter
         column={table.getColumn('justified')}
         title="Обоснованность"
-        options={JUSTIFIED_OPTIONS}
+        options={justifiedOptions}
       />
       {isFiltered && (
         <Button

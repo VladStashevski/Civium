@@ -137,14 +137,16 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
     [rows],
   )
   const yearOptions = React.useMemo(() => {
-    const years = new Set(
-      rows
-        .map((appeal) => appeal.dateIso.slice(0, 4))
-        .filter((year) => /^\d{4}$/.test(year)),
-    )
-    return [...years]
-      .sort((a, b) => b.localeCompare(a, 'ru'))
-      .map((value) => ({ label: value, value }))
+    const counts = new Map<string, number>()
+    for (const appeal of rows) {
+      const year = appeal.dateIso.slice(0, 4)
+      if (/^\d{4}$/.test(year)) {
+        counts.set(year, (counts.get(year) ?? 0) + 1)
+      }
+    }
+    return [...counts.entries()]
+      .sort(([a], [b]) => b.localeCompare(a, 'ru'))
+      .map(([value, count]) => ({ label: value, value, count }))
   }, [rows])
   const profileOptions = React.useMemo(
     () => uniqueOptions(rows, (appeal) => appeal.profile),

@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import {
   fetchPos,
   patchPos,
@@ -12,8 +17,14 @@ import { syncPosAnnotationTimestamps } from '../../scripts/pos-annotations.mjs'
 export function usePos() {
   return useQuery({
     queryKey: ['pos'],
-    queryFn: fetchPos,
+    queryFn: ({ signal }) => fetchPos(signal),
   })
+}
+
+async function refreshPosQueriesAfterImport(qc: QueryClient) {
+  await qc.cancelQueries({ queryKey: ['pos'] })
+  qc.removeQueries({ queryKey: ['pos'], type: 'inactive' })
+  await qc.invalidateQueries({ queryKey: ['pos'], refetchType: 'active' })
 }
 
 export function usePatchPos() {
@@ -107,6 +118,6 @@ export function useUploadPosExcel() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (file: File) => uploadPosExcel(file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pos'] }),
+    onSuccess: () => refreshPosQueriesAfterImport(qc),
   })
 }
