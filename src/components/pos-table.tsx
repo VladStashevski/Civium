@@ -69,26 +69,33 @@ function countStaticOptions(
 
 export function PosTable() {
   const { data, isPending } = usePos()
+  const defaultSorting = React.useMemo<SortingState>(() => [], [])
+  const defaultColumnSizing = React.useMemo<ColumnSizingState>(() => ({}), [])
+  const defaultColumnVisibility = React.useMemo<VisibilityState>(
+    () => ({ ...DEFAULT_HIDDEN }),
+    [],
+  )
   // Настройки таблицы помним в localStorage (сортировка, видимость, ширины, размер
   // страницы). Поиск и фильтры — разовые, не персистим.
   const [sorting, setSorting] = usePersistentState<SortingState>(
     'pos-table:sorting',
-    [],
+    defaultSorting,
   )
   const [globalFilter, setGlobalFilter] = React.useState('')
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnSizing, setColumnSizing] = usePersistentState<ColumnSizingState>(
     'pos-table:sizing',
-    {},
+    defaultColumnSizing,
   )
   const [pageIndex, setPageIndex] = React.useState(0)
   const [pageSize, setPageSize] = usePersistentState('pos-table:page-size', 20)
   const { enteringColumnId, exitingColumnId, setColumnVisible } =
     useColumnVisibilityTransition<PosMessage>()
   const [columnVisibility, setColumnVisibility] =
-    usePersistentState<VisibilityState>('pos-table:visibility', {
-      ...DEFAULT_HIDDEN,
-    })
+    usePersistentState<VisibilityState>(
+      'pos-table:visibility',
+      defaultColumnVisibility,
+    )
 
   const rows = React.useMemo(() => data?.items ?? [], [data])
   const sourceOptions = React.useMemo(

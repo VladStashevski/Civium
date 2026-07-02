@@ -89,18 +89,27 @@ function countStaticOptions(
 
 export function AppealsTable({ mode }: { mode: AppealMode }) {
   const { data, isPending } = useAppeals(mode)
+  const defaultSorting = React.useMemo<SortingState>(() => [], [])
+  const defaultColumnSizing = React.useMemo<ColumnSizingState>(() => ({}), [])
+  const defaultColumnVisibility = React.useMemo<VisibilityState>(
+    () => ({
+      ...DEFAULT_HIDDEN,
+      registrationRoute: mode === 'external',
+    }),
+    [mode],
+  )
   // Настройки таблицы помним в localStorage, ОТДЕЛЬНО по каждому режиму (ключ
   // содержит mode): сортировка, видимость колонок, их ширины, размер страницы.
   // Поиск и фильтры намеренно НЕ персистим — это разовый запрос, не «настройка».
   const [sorting, setSorting] = usePersistentState<SortingState>(
     `appeals-table:${mode}:sorting`,
-    [],
+    defaultSorting,
   )
   const [globalFilter, setGlobalFilter] = React.useState('')
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnSizing, setColumnSizing] = usePersistentState<ColumnSizingState>(
     `appeals-table:${mode}:sizing`,
-    {},
+    defaultColumnSizing,
   )
   const [pageIndex, setPageIndex] = React.useState(0)
   const [pageSize, setPageSize] = usePersistentState(
@@ -110,10 +119,10 @@ export function AppealsTable({ mode }: { mode: AppealMode }) {
   const { enteringColumnId, exitingColumnId, setColumnVisible } =
     useColumnVisibilityTransition<Appeal>()
   const [columnVisibility, setColumnVisibility] =
-    usePersistentState<VisibilityState>(`appeals-table:${mode}:visibility`, {
-      ...DEFAULT_HIDDEN,
-      registrationRoute: mode === 'external',
-    })
+    usePersistentState<VisibilityState>(
+      `appeals-table:${mode}:visibility`,
+      defaultColumnVisibility,
+    )
 
   const allRows = React.useMemo(() => data?.items ?? [], [data])
   const rows = React.useMemo(

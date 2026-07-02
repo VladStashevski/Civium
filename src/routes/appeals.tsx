@@ -9,5 +9,5 @@ export const Route = createFileRoute('/appeals')({
 
 function AppealsPage() {
   const { mode } = Route.useSearch()
-  return <AppealsTable mode={mode} />
+  return <AppealsTable key={mode} mode={mode} />
 }
