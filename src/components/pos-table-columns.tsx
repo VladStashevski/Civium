@@ -398,6 +398,9 @@ export const COLUMN_MIN_WIDTHS: Record<string, number> = {
 
 export const RATING_OPTIONS: FacetOption[] = [
   { label: '5 — отлично', value: '5' },
+  { label: '4', value: '4' },
+  { label: '3', value: '3' },
+  { label: '2', value: '2' },
   { label: '1 — плохо', value: '1' },
   { label: 'Без оценки', value: '' },
 ]
@@ -405,6 +408,7 @@ export const RATING_OPTIONS: FacetOption[] = [
 export const JUSTIFIED_OPTIONS: FacetOption[] = [
   { label: 'Обоснованно', value: 'Обоснованно' },
   { label: 'Не обоснованно', value: 'Не обоснованно' },
+  { label: 'Не задано', value: '' },
 ]
 
 export function uniqueOptions(

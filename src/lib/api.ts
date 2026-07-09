@@ -433,9 +433,10 @@ export async function login(email: string, password: string): Promise<Session> {
     if (res.status === 401) throw new Error('Неверная почта или пароль')
     if (res.status === 429) {
       const retryAfter = Number(res.headers.get('Retry-After'))
-      const suffix = Number.isFinite(retryAfter)
-        ? ` Повторите через ${Math.ceil(retryAfter / 60)} мин.`
-        : ''
+      const suffix =
+        Number.isFinite(retryAfter) && retryAfter > 0
+          ? ` Повторите через ${Math.max(1, Math.ceil(retryAfter / 60))} мин.`
+          : ''
       throw new Error(`Слишком много попыток входа.${suffix}`)
     }
     throw new Error(serverMessage || `Не удалось войти: ${res.status}`)

@@ -279,12 +279,7 @@ export function createPosRepository({ dataDir, seedFile } = {}) {
     ensure,
     async list() {
       const store = await read()
-      const items = store.records
-        .slice()
-        .sort(
-          (a, b) =>
-            b.dateIso.localeCompare(a.dateIso) || b.uid.localeCompare(a.uid),
-        )
+      const items = store.records.slice().sort(comparePosRecords)
       return { items, total: items.length, updatedAt: store.updatedAt }
     },
     async patch(body = {}) {

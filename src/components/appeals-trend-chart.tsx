@@ -26,6 +26,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { usePrefersReducedMotion } from '@/hooks/use-prefers-reduced-motion'
 import { useDashboard } from '@/hooks/use-appeals'
 import { normalizeDashboard } from '@/lib/appeals-data'
 import type { AppealMode } from '@/lib/api'
@@ -71,21 +72,6 @@ function MonthAxisTick({
       {label}
     </text>
   )
-}
-
-function usePrefersReducedMotion() {
-  const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false)
-
-  React.useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches)
-
-    updatePreference()
-    mediaQuery.addEventListener('change', updatePreference)
-    return () => mediaQuery.removeEventListener('change', updatePreference)
-  }, [])
-
-  return prefersReducedMotion
 }
 
 export function AppealsTrendChart({ mode }: { mode: AppealMode }) {
