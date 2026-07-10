@@ -5,8 +5,9 @@ civium.online, www.civium.online {
 
 # MedChief живет в соседнем compose (/opt/medchief) и подключен к сети
 # civium_default; блок обязан жить в репо, иначе deploy-vps.sh сотрет его
-# при git reset --hard.
-medchief.civium.online {
+# при git reset --hard. Домен sslip.io резолвится в IP сам — DNS-запись
+# не нужна.
+medchief.135.106.137.190.sslip.io {
 	encode zstd gzip
 	reverse_proxy medchief-web:80
 }
