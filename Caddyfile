@@ -2,3 +2,11 @@ civium.online, www.civium.online {
 	encode zstd gzip
 	reverse_proxy web:80
 }
+
+# MedChief живет в соседнем compose (/opt/medchief) и подключен к сети
+# civium_default; блок обязан жить в репо, иначе deploy-vps.sh сотрет его
+# при git reset --hard.
+medchief.civium.online {
+	encode zstd gzip
+	reverse_proxy medchief-web:80
+}
